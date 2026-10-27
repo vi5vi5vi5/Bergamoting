@@ -1,0 +1,280 @@
+//go:build arm64
+
+package i32
+
+import "github.com/tphakala/simd/cpu"
+
+// NEON processes 4 int32 pairs (one .4S register) per iteration.
+const minNEONElements = 4
+
+var hasNEON = cpu.ARM64.NEON
+
+func interleave2I32(dst, a, b []int32) {
+	if hasNEON && len(a) >= minNEONElements {
+		interleave2NEON(dst, a, b)
+		return
+	}
+	interleave2Go(dst, a, b)
+}
+
+func deinterleave2I32(a, b, src []int32) {
+	if hasNEON && len(a) >= minNEONElements {
+		deinterleave2NEON(a, b, src)
+		return
+	}
+	deinterleave2Go(a, b, src)
+}
+
+//go:noescape
+func interleave2NEON(dst, a, b []int32)
+
+//go:noescape
+func deinterleave2NEON(a, b, src []int32)
+
+func addI32(dst, a, b []int32) {
+	if hasNEON && len(dst) >= minNEONElements {
+		addNEON(dst, a, b)
+		return
+	}
+	addGo(dst, a, b)
+}
+
+func subI32(dst, a, b []int32) {
+	if hasNEON && len(dst) >= minNEONElements {
+		subNEON(dst, a, b)
+		return
+	}
+	subGo(dst, a, b)
+}
+
+//go:noescape
+func addNEON(dst, a, b []int32)
+
+//go:noescape
+func subNEON(dst, a, b []int32)
+
+// Tier-3 thresholds: one 4-wide (.4S) vector block each, independent literals
+// rather than aliases of minNEONElements, which they happen to equal, so
+// retuning the interleave kernels cannot silently move these. Both kernels are
+// correct at any length (each falls through to a scalar tail), so these are
+// performance cuts only, never a safety requirement.
+const (
+	minNEONSum = 4
+	minNEONAbs = 4
+)
+
+func sumI32(a []int32) int32 {
+	if hasNEON && len(a) >= minNEONSum {
+		return sumNEON(a)
+	}
+	return sumGo(a)
+}
+
+func absI32(dst, a []int32) {
+	if hasNEON && len(dst) >= minNEONAbs {
+		absNEON(dst, a)
+		return
+	}
+	absGo(dst, a)
+}
+
+//go:noescape
+func sumNEON(a []int32) int32
+
+//go:noescape
+func absNEON(dst, a []int32)
+
+// minNEONNegWhereNeg is one 4-wide (.4S) block, an independent literal like the
+// tier-3 thresholds above. The kernel is correct at any length (it falls through
+// to a scalar tail), so this is a performance cut only, never a safety
+// requirement.
+const minNEONNegWhereNeg = 4
+
+func negWhereNegI32(dst, mag []int32, sign []float32) {
+	if hasNEON && len(dst) >= minNEONNegWhereNeg {
+		negWhereNegNEON(dst, mag, sign)
+		return
+	}
+	negWhereNegGo(dst, mag, sign)
+}
+
+//go:noescape
+func negWhereNegNEON(dst, mag []int32, sign []float32)
+
+// minNEONScaleQ31 and minNEONScaleQ15 are one 4-wide (.4S) block each,
+// independent literals like the tier-3 thresholds above. Both kernels are correct
+// at any length (each falls through to a scalar tail), so these are performance
+// cuts only, never a safety requirement.
+const (
+	minNEONScaleQ31 = 4
+	minNEONScaleQ15 = 4
+)
+
+func scaleQ31I32(dst, a []int32, k int32) {
+	if hasNEON && len(dst) >= minNEONScaleQ31 {
+		scaleQ31NEON(dst, a, k)
+		return
+	}
+	scaleQ31Go(dst, a, k)
+}
+
+func scaleQ15I32(dst, a []int32, k int16) {
+	if hasNEON && len(dst) >= minNEONScaleQ15 {
+		scaleQ15NEON(dst, a, k)
+		return
+	}
+	scaleQ15Go(dst, a, k)
+}
+
+//go:noescape
+func scaleQ31NEON(dst, a []int32, k int32)
+
+//go:noescape
+func scaleQ15NEON(dst, a []int32, k int16)
+
+// minNEONGainQ31 is one 4-wide (.4S) block, an independent literal like the scale
+// thresholds above. The kernel is correct at any length (it falls through to a
+// scalar tail), so this is a performance cut only, never a safety requirement.
+//
+// This stays at one block: MEASURED on a Raspberry Pi 5, the NEON GainQ31 kernel
+// scales cleanly with n and already beats gainQ31Go from the smallest sizes (n=8:
+// ~15.8 vs 16.4 ns; n=16: ~20.4 vs 29.3), with no fixed per-call cost. NEON never had
+// the AVX-SSE transition assist that once pushed the amd64 gain crossover out to 160
+// (removed in #268), so one block has always been the right threshold here. See #251.
+const minNEONGainQ31 = 4
+
+func gainQ31I32(dst, a []int32, gain int32, preShift, postShift int) {
+	if hasNEON && len(dst) >= minNEONGainQ31 {
+		gainQ31NEON(dst, a, gain, preShift, postShift)
+		return
+	}
+	gainQ31Go(dst, a, gain, preShift, postShift)
+}
+
+//go:noescape
+func gainQ31NEON(dst, a []int32, gain int32, preShift, postShift int)
+
+// minNEONButterfly is one 4-wide (.4S) block, an independent literal like the
+// tier-3 thresholds above. The kernel is correct at any length (it falls through
+// to a scalar tail), so this is a performance cut only, never a safety
+// requirement.
+const minNEONButterfly = 4
+
+func butterflyI32(lo, hi []int32) {
+	if hasNEON && len(lo) >= minNEONButterfly {
+		butterflyNEON(lo, hi)
+		return
+	}
+	butterflyGo(lo, hi)
+}
+
+//go:noescape
+func butterflyNEON(lo, hi []int32)
+
+// minNEONMinMax is one 4-wide (.4S) block. Unlike the shared minNEONElements it is
+// an independent literal AND a correctness floor, not just a performance cut: the
+// minMaxNEON kernel folds an overlapping final .4S block that reloads res[n-4] in
+// place of a scalar tail, so it must never run on fewer than 4 elements. Keeping it
+// separate means a future retune of the shared minNEONElements (add/sub/interleave)
+// cannot silently move this safety floor. The i16 minNEONMinMax carries the same
+// guard for the same reason.
+const minNEONMinMax = 4
+
+// minMaxI32 dispatches the signed int32 min/max reduction. The NEON kernel does the
+// reduction in 4-wide SMIN/SMAX lanes (a 2-block unroll with dual min/max
+// accumulator pairs), folds an overlapping final .4S block in place of a scalar
+// tail, then reduces with a single-instruction SMINV/SMAXV across-vector fold, so
+// the n >= minNEONMinMax gate is a correctness floor (the overlap block reloads
+// res[n-4]), not just a performance cut; shorter slices use the pure-Go reference.
+// res is non-empty (the public MinMax guards the empty case).
+func minMaxI32(res []int32) (minVal, maxVal int32) {
+	if hasNEON && len(res) >= minNEONMinMax {
+		return minMaxNEON(res)
+	}
+	return minMaxGo(res)
+}
+
+//go:noescape
+func minMaxNEON(res []int32) (minVal, maxVal int32)
+
+// minNEONMaxAbs is one 4-wide (.4S) block. Like minNEONMinMax it is an independent
+// literal AND a correctness floor, not just a performance cut: the maxAbsNEON kernel
+// does the signed min/max reduction in 4-wide SMIN/SMAX lanes, folds an overlapping
+// final .4S block that reloads a[n-4] in place of a scalar tail, reduces with
+// SMINV/SMAXV, then combines to max(maxVal, -minVal), so it must never run on fewer
+// than 4 elements. Keeping it separate from the shared minNEONElements means a future
+// retune of that cannot silently move this safety floor; shorter slices use the
+// pure-Go reference. a is non-empty (the public MaxAbs guards the empty case).
+const minNEONMaxAbs = 4
+
+func maxAbsI32(a []int32) int32 {
+	if hasNEON && len(a) >= minNEONMaxAbs {
+		return maxAbsNEON(a)
+	}
+	return maxAbsGo(a)
+}
+
+//go:noescape
+func maxAbsNEON(a []int32) int32
+
+// minNEONSumSqShiftedQ31 is one 4-wide (.4S) block, an independent literal like
+// the tier-3 thresholds above. The kernel does the widen-square-accumulate in
+// 4-wide lanes with a VADDV across-vector fold and a scalar tail, so it gates on
+// NEON and at least one full 4-element block; shorter slices use the pure-Go
+// reference. The kernel is correct at any length via the scalar tail, so this is a
+// performance cut only, never a safety requirement.
+//
+// This stays at one block: there is no fixed per-call cost to amortise here. MEASURED
+// on Apple Silicon (arm64, -benchtime pinned): the kernel is on par with
+// sumSqShiftedQ31Go at one block (n=4, ~2.0 ns either way) and pulls ahead from n=8
+// (2.3 vs 3.2 ns, 1.4x), the same shape as the other NEON reductions, so one block is
+// the right cut.
+const minNEONSumSqShiftedQ31 = 4
+
+func sumSqShiftedQ31I32(a []int32, shift int) int32 {
+	if hasNEON && len(a) >= minNEONSumSqShiftedQ31 {
+		return sumSqShiftedQ31NEON(a, shift)
+	}
+	return sumSqShiftedQ31Go(a, shift)
+}
+
+//go:noescape
+func sumSqShiftedQ31NEON(a []int32, shift int) int32
+
+// minNEONFIR is one 4-wide (.4S) output block: FIRValidQ15's NEON kernel
+// vectorizes over 4 outputs per iteration with a scalar-output tail, so it gates
+// on NEON and at least one full 4-output block; shorter outputs use the pure-Go
+// reference. The kernel is correct at any output length via the scalar-output
+// tail, so this is a performance cut only, never a safety requirement. len(dst)
+// here is already the clamped output count n from the public FIRValidQ15.
+const minNEONFIR = 4
+
+func firValidQ15I32(dst, x []int32, taps []int16) {
+	if hasNEON && len(dst) >= minNEONFIR {
+		firValidQ15NEON(dst, x, taps)
+		return
+	}
+	firValidQ15Go(dst, x, taps)
+}
+
+//go:noescape
+func firValidQ15NEON(dst, x []int32, taps []int16)
+
+// minNEONSymFIR is one 4-wide (.4S) output block: FIRSymValidQ15's NEON kernel
+// vectorizes over 4 outputs per iteration with a scalar-output tail, so it gates
+// on NEON and at least one full 4-output block; shorter outputs use the pure-Go
+// reference. The kernel is correct at any output length via the scalar-output
+// tail, so this is a performance cut only, never a safety requirement. len(dst)
+// here is already the clamped output count n from the public FIRSymValidQ15.
+const minNEONSymFIR = 4
+
+func firSymValidQ15I32(dst, x []int32, center int16, pairs []int16) {
+	if hasNEON && len(dst) >= minNEONSymFIR {
+		firSymValidQ15NEON(dst, x, center, pairs)
+		return
+	}
+	firSymValidQ15Go(dst, x, center, pairs)
+}
+
+//go:noescape
+func firSymValidQ15NEON(dst, x []int32, center int16, pairs []int16)

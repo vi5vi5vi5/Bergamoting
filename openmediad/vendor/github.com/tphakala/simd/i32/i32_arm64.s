@@ -1,0 +1,993 @@
+//go:build arm64
+
+#include "textflag.h"
+
+// int32 (de)interleave on ARM64 (NEON / ASIMD).
+//
+// ZIP1/ZIP2/UZP1/UZP2 on .4S operands and the VLD1/VST1 .S4 loads/stores all
+// move 32-bit lanes by bit pattern, so these kernels are the int32 counterparts
+// of interleave2NEON / deinterleave2NEON in ../f32/f32_arm64.s with identical
+// vector bodies; only the scalar tails differ (integer MOVW instead of FMOVS).
+// The ZIP/UZP instructions are hand-encoded as WORD because the Go assembler
+// lacks mnemonics for them; the trailing comment is the decoded form and is
+// cross-checked by asmcheck_test.go.
+
+// func interleave2NEON(dst, a, b []int32)
+// Interleaves: dst[0]=a[0], dst[1]=b[0], dst[2]=a[1], dst[3]=b[1], ...
+TEXT ·interleave2NEON(SB), NOSPLIT, $0-72
+    MOVD dst_base+0(FP), R0    // dst pointer
+    MOVD a_base+24(FP), R1     // a pointer
+    MOVD a_len+32(FP), R3      // n = len(a)
+    MOVD b_base+48(FP), R2     // b pointer
+
+    // Process 4 pairs at a time
+    LSR $2, R3, R4             // R4 = n / 4
+    CBZ R4, interleave2_neon_remainder
+
+interleave2_neon_loop4:
+    VLD1.P 16(R1), [V0.S4]     // V0 = [a0, a1, a2, a3]
+    VLD1.P 16(R2), [V1.S4]     // V1 = [b0, b1, b2, b3]
+    WORD $0x4E813802           // ZIP1 V2.4S, V0.4S, V1.4S -> [a0, b0, a1, b1]
+    WORD $0x4E817803           // ZIP2 V3.4S, V0.4S, V1.4S -> [a2, b2, a3, b3]
+    VST1.P [V2.S4], 16(R0)     // Store [a0, b0, a1, b1]
+    VST1.P [V3.S4], 16(R0)     // Store [a2, b2, a3, b3]
+    SUB $1, R4
+    CBNZ R4, interleave2_neon_loop4
+
+interleave2_neon_remainder:
+    AND $3, R3
+    CBZ R3, interleave2_neon_done
+
+interleave2_neon_loop1:
+    MOVW (R1), R5
+    MOVW (R2), R6
+    MOVW R5, (R0)
+    MOVW R6, 4(R0)
+    ADD $4, R1
+    ADD $4, R2
+    ADD $8, R0
+    SUB $1, R3
+    CBNZ R3, interleave2_neon_loop1
+
+interleave2_neon_done:
+    RET
+
+// func deinterleave2NEON(a, b, src []int32)
+// Deinterleaves: a[0]=src[0], b[0]=src[1], a[1]=src[2], b[1]=src[3], ...
+TEXT ·deinterleave2NEON(SB), NOSPLIT, $0-72
+    MOVD a_base+0(FP), R0      // a pointer
+    MOVD a_len+8(FP), R3       // n = len(a)
+    MOVD b_base+24(FP), R1     // b pointer
+    MOVD src_base+48(FP), R2   // src pointer
+
+    // Process 4 pairs at a time
+    LSR $2, R3, R4             // R4 = n / 4
+    CBZ R4, deinterleave2_neon_remainder
+
+deinterleave2_neon_loop4:
+    VLD1.P 16(R2), [V0.S4]     // V0 = [a0, b0, a1, b1]
+    VLD1.P 16(R2), [V1.S4]     // V1 = [a2, b2, a3, b3]
+    WORD $0x4E811802           // UZP1 V2.4S, V0.4S, V1.4S -> [a0, a1, a2, a3]
+    WORD $0x4E815803           // UZP2 V3.4S, V0.4S, V1.4S -> [b0, b1, b2, b3]
+    VST1.P [V2.S4], 16(R0)     // Store a
+    VST1.P [V3.S4], 16(R1)     // Store b
+    SUB $1, R4
+    CBNZ R4, deinterleave2_neon_loop4
+
+deinterleave2_neon_remainder:
+    AND $3, R3
+    CBZ R3, deinterleave2_neon_done
+
+deinterleave2_neon_loop1:
+    MOVW (R2), R5
+    MOVW 4(R2), R6
+    MOVW R5, (R0)
+    MOVW R6, (R1)
+    ADD $8, R2
+    ADD $4, R0
+    ADD $4, R1
+    SUB $1, R3
+    CBNZ R3, deinterleave2_neon_loop1
+
+deinterleave2_neon_done:
+    RET
+
+// Arithmetic and reduction kernels (NEON / ASIMD).
+//
+// These do integer ALU work on .4S vectors (4 int32/iter). Each vector lane is
+// 32 bits, so the SIMD path wraps exactly like the int32 Go reference; the
+// scalar tails use the W-register (32-bit) ALU forms (ADDW/SUBW/...) so they
+// wrap identically. SMIN/SMAX/SMINV/SMAXV and vector ABS have no Go assembler
+// mnemonics and are hand-encoded as WORD with the decoded GNU form in the
+// trailing comment (cross-checked by asmcheck_test.go). The ADD/SUB vector
+// WORDs below are hand-encoded too even though the assembler does accept the
+// native VADD/VSUB spellings on .S4 operands (sumNEON uses one); they stay as
+// verified WORD encodings rather than churn. Dispatched from i32_arm64.go
+// gated on the NEON CPU feature, with the pure-Go reference as the fallback.
+
+// func addNEON(dst, a, b []int32)
+TEXT ·addNEON(SB), NOSPLIT, $0-72
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R3
+    MOVD a_base+24(FP), R1
+    MOVD b_base+48(FP), R2
+
+    LSR $2, R3, R4
+    CBZ R4, add_neon_remainder
+
+add_neon_loop4:
+    VLD1.P 16(R1), [V0.S4]
+    VLD1.P 16(R2), [V1.S4]
+    WORD $0x4EA18402           // ADD V2.4S, V0.4S, V1.4S
+    VST1.P [V2.S4], 16(R0)
+    SUB $1, R4
+    CBNZ R4, add_neon_loop4
+
+add_neon_remainder:
+    AND $3, R3
+    CBZ R3, add_neon_done
+
+add_neon_loop1:
+    MOVW (R1), R5
+    MOVW (R2), R6
+    ADDW R6, R5, R5
+    MOVW R5, (R0)
+    ADD $4, R1
+    ADD $4, R2
+    ADD $4, R0
+    SUB $1, R3
+    CBNZ R3, add_neon_loop1
+
+add_neon_done:
+    RET
+
+// func subNEON(dst, a, b []int32)
+TEXT ·subNEON(SB), NOSPLIT, $0-72
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R3
+    MOVD a_base+24(FP), R1
+    MOVD b_base+48(FP), R2
+
+    LSR $2, R3, R4
+    CBZ R4, sub_neon_remainder
+
+sub_neon_loop4:
+    VLD1.P 16(R1), [V0.S4]
+    VLD1.P 16(R2), [V1.S4]
+    WORD $0x6EA18402           // SUB V2.4S, V0.4S, V1.4S
+    VST1.P [V2.S4], 16(R0)
+    SUB $1, R4
+    CBNZ R4, sub_neon_loop4
+
+sub_neon_remainder:
+    AND $3, R3
+    CBZ R3, sub_neon_done
+
+sub_neon_loop1:
+    MOVW (R1), R5
+    MOVW (R2), R6
+    SUBW R6, R5, R5
+    MOVW R5, (R0)
+    ADD $4, R1
+    ADD $4, R2
+    ADD $4, R0
+    SUB $1, R3
+    CBNZ R3, sub_neon_loop1
+
+sub_neon_done:
+    RET
+
+// func minMaxNEON(res []int32) (minVal, maxVal int32)
+// Signed int32 min and max over res in one pass, with a 2-block unroll that keeps
+// two independent SMIN and two independent SMAX chains so the compare latency
+// stays off the loop-carried critical path (same rewrite as the i16 minMaxNEON,
+// #282). The dispatch gates len(res) >= 4, so block 0 always exists: it seeds both
+// accumulator pairs (min1=V0,max1=V1, min2=V5,max2=V6); the loop folds 2 blocks
+// per iteration, a possible odd trailing block folds into the first pair, the two
+// pairs are combined, and when (n mod 4) != 0 the last 4 elements res[n-4:n] are
+// folded in as one overlapping .4S block before the horizontal reduce, so every
+// element stays on the SIMD path (no scalar tail). SMINV/SMAXV then reduce each
+// accumulator across its 4 lanes to a scalar. SMIN/SMAX/SMINV/SMAXV have no Go
+// assembler mnemonic, so they are hand-encoded WORD directives (the trailing
+// comment is the decoded form, cross-checked by asmcheck_test.go). Every compare
+// is signed and min/max is idempotent (seeding both pairs from block 0, and
+// re-counting the overlap of already-processed elements, both double-count
+// harmlessly), so the result matches minMaxGo exactly. The overlap block replaces
+// a scalar tail of up to 3 CSEL iterations: measured roughly -13% to -17% at
+// ragged sizes n=7..63 on Cortex-A76, tapering to neutral by n>=1023 as the tail
+// becomes a negligible fraction of the work (#286). The one exception is a
+// single-block residue-1 input (n=5), where re-folding a whole .4S block costs
+// ~0.4 ns more than the single CSEL it replaces; that is a measured tradeoff left
+// documented rather than special-cased.
+TEXT ·minMaxNEON(SB), NOSPLIT, $0-32
+    MOVD res_base+0(FP), R2
+    MOVD res_len+8(FP), R3
+
+    LSR  $2, R3, R4                  // R4 = full 4-element blocks (>=1)
+    VLD1 (R2), [V0.S4]               // min1 = block 0
+    VLD1 (R2), [V1.S4]               // max1 = block 0
+    VLD1 (R2), [V5.S4]               // min2 = block 0 (idempotent seed)
+    VLD1.P 16(R2), [V6.S4]           // max2 = block 0 (advance past block 0)
+    SUB  $1, R4                      // blocks after block 0
+    // Single block: V0/V1 already hold block 0, so foldpairs would be a no-op
+    // self-fold. Skip it and go straight to the overlap check (which must still
+    // run so the tail is not dropped, the #285 hazard), rather than jumping past
+    // both straight to the reduce.
+    CBZ  R4, mm_neon_overlap
+
+    LSR  $1, R4, R7                 // R7 = pairs = (blocks after 0) / 2
+    CBZ  R7, mm_neon_odd
+
+mm_neon_loop:
+    VLD1.P 32(R2), [V2.S4, V3.S4]
+    WORD $0x4EA26C00                 // SMIN V0.4S, V0.4S, V2.4S
+    WORD $0x4EA26421                 // SMAX V1.4S, V1.4S, V2.4S
+    WORD $0x4EA36CA5                 // SMIN V5.4S, V5.4S, V3.4S
+    WORD $0x4EA364C6                 // SMAX V6.4S, V6.4S, V3.4S
+    SUB  $1, R7
+    CBNZ R7, mm_neon_loop
+
+mm_neon_odd:
+    TBZ  $0, R4, mm_neon_foldpairs   // R4 (blocks after block 0) even => no leftover block
+    VLD1.P 16(R2), [V2.S4]
+    WORD $0x4EA26C00                 // SMIN V0.4S, V0.4S, V2.4S
+    WORD $0x4EA26421                 // SMAX V1.4S, V1.4S, V2.4S
+
+mm_neon_foldpairs:
+    WORD $0x4EA56C00                 // SMIN V0.4S, V0.4S, V5.4S
+    WORD $0x4EA66421                 // SMAX V1.4S, V1.4S, V6.4S
+
+mm_neon_overlap:
+    // Overlapping tail: when (n mod 4) != 0, fold the last 4 elements res[n-4:n]
+    // in as one .4S block before the horizontal reduce, so every element stays on
+    // the SIMD path (no scalar tail). Idempotency makes re-counting the overlap of
+    // already-processed elements harmless; the n >= 4 gate keeps res[n-4] in range.
+    AND  $3, R3, R4
+    CBZ  R4, mm_neon_reduce
+    SUB  $4, R3, R7                  // R7 = n - 4 (element index of the overlap block)
+    LSL  $2, R7, R7                 // R7 = (n-4)*4 bytes
+    MOVD res_base+0(FP), R2          // reload base (R2 was advanced past the full blocks)
+    ADD  R7, R2, R2                 // R2 = &res[n-4]
+    VLD1 (R2), [V2.S4]
+    WORD $0x4EA26C00                 // SMIN V0.4S, V0.4S, V2.4S
+    WORD $0x4EA26421                 // SMAX V1.4S, V1.4S, V2.4S
+
+mm_neon_reduce:
+    WORD $0x4EB1A803                 // SMINV S3, V0.4S
+    WORD $0x4EB0A824                 // SMAXV S4, V1.4S
+    FMOVS F3, R5                     // R5 = running min (low 32 = int32)
+    FMOVS F4, R6                     // R6 = running max (low 32 = int32)
+
+mm_neon_done:
+    MOVW R5, minVal+24(FP)
+    MOVW R6, maxVal+28(FP)
+    RET
+
+// func sumNEON(a []int32) int32
+// Wrapping int32 sum with four independent VADD accumulators (V16..V19), so the
+// accumulate latency stays off the loop-carried critical path: the 16-wide main
+// loop keeps four parallel int32 chains, a 4-wide cleanup loop folds the
+// (n mod 16)/4 residual blocks, ADDV reduces to a scalar, and a 32-bit scalar
+// tail adds the (n mod 4) remainder. Every add wraps in a 32-bit lane, and
+// wrapping addition is associative, so the four-way lane split and the reduction
+// order are bit-identical to sumGo for every input, including forced overflow.
+// The slice arrives pre-clamped from the public Sum, so a_len is the trusted
+// element count. Same latency-hiding rewrite as the i16 sumNEON (#282): measured
+// roughly -55% at n=1024 and -56% at n=4096 on Cortex-A76 (#283). Below n=32 the
+// two-level tail's extra addressing costs ~1-2 ns over the old single-accumulator
+// form; the win starts around n=63.
+TEXT ·sumNEON(SB), NOSPLIT, $0-28
+    MOVD a_base+0(FP), R1
+    MOVD a_len+8(FP), R3
+
+    VEOR V16.B16, V16.B16, V16.B16   // primary int32 accumulator = 0
+    LSR  $4, R3, R4              // R4 = n / 16
+    CBZ  R4, sum_neon_cleanup    // no 16-wide block: single-accumulator path only
+
+    VEOR V17.B16, V17.B16, V17.B16   // three more accumulators, zeroed only when the
+    VEOR V18.B16, V18.B16, V18.B16   // 16-wide main loop runs, so small n keeps the
+    VEOR V19.B16, V19.B16, V19.B16   // single-accumulator cost
+
+sum_neon_loop16:
+    VLD1.P 64(R1), [V0.S4, V1.S4, V2.S4, V3.S4]
+    VADD V0.S4, V16.S4, V16.S4
+    VADD V1.S4, V17.S4, V17.S4
+    VADD V2.S4, V18.S4, V18.S4
+    VADD V3.S4, V19.S4, V19.S4
+    SUB  $1, R4
+    CBNZ R4, sum_neon_loop16
+
+    VADD V17.S4, V16.S4, V16.S4
+    VADD V19.S4, V18.S4, V18.S4
+    VADD V18.S4, V16.S4, V16.S4   // four chains -> V16
+
+sum_neon_cleanup:
+    AND  $15, R3, R2            // R2 = n mod 16
+    LSR  $2, R2, R4            // R4 = (n mod 16) / 4, in {0,1,2,3}
+    CBZ  R4, sum_neon_reduce
+
+sum_neon_loop4:
+    VLD1.P 16(R1), [V0.S4]
+    VADD V0.S4, V16.S4, V16.S4
+    SUB  $1, R4
+    CBNZ R4, sum_neon_loop4
+
+sum_neon_reduce:
+    WORD $0x4EB1BA10           // ADDV S16, V16.4S
+    FMOVS F16, R5              // vector partial sum (low 32 = int32)
+
+    AND  $3, R3
+    CBZ  R3, sum_neon_done
+
+sum_neon_scalar:
+    MOVW.P 4(R1), R6
+    ADDW R6, R5, R5            // 32-bit add: wraps like sumGo
+    SUB  $1, R3
+    CBNZ R3, sum_neon_scalar
+
+sum_neon_done:
+    MOVW R5, ret+24(FP)
+    RET
+
+// func absNEON(dst, a []int32)
+// Wrapping absolute value, 4 lanes per iteration: vector ABS wraps at the
+// type minimum (abs(MinInt32) = MinInt32 in a 32-bit lane), which is absGo's
+// contract. The scalar tail computes |v| in a 64-bit GPR, where -(MinInt32)
+// is +2^31, and the MOVW store keeps the low 32 bits, wrapping it back to
+// MinInt32 identically.
+TEXT ·absNEON(SB), NOSPLIT, $0-48
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R3
+    MOVD a_base+24(FP), R1
+
+    LSR  $2, R3, R4            // R4 = n / 4
+    CBZ  R4, abs_neon_remainder
+
+abs_neon_loop4:
+    VLD1.P 16(R1), [V0.S4]
+    WORD $0x4EA0B801           // ABS V1.4S, V0.4S
+    VST1.P [V1.S4], 16(R0)
+    SUB  $1, R4
+    CBNZ R4, abs_neon_loop4
+
+abs_neon_remainder:
+    AND  $3, R3
+    CBZ  R3, abs_neon_done
+
+abs_neon_scalar:
+    MOVW.P 4(R1), R5           // v, sign-extended
+    NEG  R5, R6                // -v
+    CMP  $0, R5
+    CSEL LT, R6, R5, R5        // |v| = v < 0 ? -v : v   (can be 2^31)
+    MOVW.P R5, 4(R0)           // low 32 bits: 2^31 wraps to MinInt32
+    SUB  $1, R3
+    CBNZ R3, abs_neon_scalar
+
+abs_neon_done:
+    RET
+
+// func negWhereNegNEON(dst, mag []int32, sign []float32)
+// Branchless conditional negate, 4 lanes per iteration. SSHR V1.4S,#31 broadcasts
+// each sign lane's IEEE-754 sign bit to a full-width int32 mask m (all-ones iff
+// the sign bit is set, so -0.0/-Inf/-NaN negate); EOR then SUB apply (mag ^ m) -
+// m, which is -mag when m = -1 (MinInt32 wraps to itself) and mag when m = 0.
+// Bit-identical to negWhereNegGo. The scalar tail does the same in 64-bit GPRs:
+// ASR $31 of the sign-extended sign word yields m = 0 or -1, and the MOVW store
+// keeps the low 32 bits so -MinInt32 wraps back to MinInt32. The SSHR/EOR/SUB
+// WORDs are cross-checked against arm64asm by TestArm64WordEncodings. Frame is 3
+// slice headers: dst+0, mag+24, sign+48.
+TEXT ·negWhereNegNEON(SB), NOSPLIT, $0-72
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R3
+    MOVD mag_base+24(FP), R1
+    MOVD sign_base+48(FP), R2
+
+    LSR  $2, R3, R4            // R4 = n / 4
+    CBZ  R4, negwhereneg_neon_remainder
+
+negwhereneg_neon_loop4:
+    VLD1.P 16(R2), [V1.S4]     // sign
+    WORD $0x4F210421           // SSHR V1.4S, V1.4S, #31   -> mask m
+    VLD1.P 16(R1), [V0.S4]     // mag
+    WORD $0x6E211C00           // EOR V0.16B, V0.16B, V1.16B  -> mag ^ m
+    WORD $0x6EA18400           // SUB V0.4S, V0.4S, V1.4S     -> (mag ^ m) - m
+    VST1.P [V0.S4], 16(R0)
+    SUB  $1, R4
+    CBNZ R4, negwhereneg_neon_loop4
+
+negwhereneg_neon_remainder:
+    AND  $3, R3
+    CBZ  R3, negwhereneg_neon_done
+
+negwhereneg_neon_scalar:
+    MOVW.P 4(R2), R6           // sign bits, sign-extended
+    ASR  $31, R6, R6           // m = sign >> 31 = 0 or -1
+    MOVW.P 4(R1), R5           // mag, sign-extended
+    EOR  R6, R5, R5            // mag ^ m
+    SUB  R6, R5, R5            // (mag ^ m) - m
+    MOVW.P R5, 4(R0)           // low 32 bits: -MinInt32 wraps to MinInt32
+    SUB  $1, R3
+    CBNZ R3, negwhereneg_neon_scalar
+
+negwhereneg_neon_done:
+    RET
+
+// Fixed-point scale-by-scalar kernels (NEON / ASIMD).
+//
+// Both scale kernels widen with SMULL/SMULL2, multiplying the int32 lanes by the
+// broadcast coefficient into int64 products (Q=0 takes lanes 0,1; Q=1 the SMULL2
+// form takes lanes 2,3). They differ only in the fused narrow's shift immediate:
+//   - scaleQ31NEON uses SHRN/SHRN2 #31, scaleQ15NEON uses SHRN/SHRN2 #15. Each
+//     shifts every int64 product right by its Q amount and narrows the low 32 bits
+//     in one instruction. A logical (SHRN) and an arithmetic (SSHR) shift by s
+//     differ only in the shifted product's bits at and above 64-s (33 for #31, 49
+//     for #15), which the 2D->2S narrow discards, so the fused form is bit-identical
+//     to SSHR .2D #s + XTN/XTN2 for every product, negative ones included
+//     (truncation = the int32() wrap, so at #31 a=k=MinInt32's 2^62 >> 31 = 2^31
+//     lands as MinInt32).
+// k is broadcast with DUP from a W register: MOVW sign-extends the int32 for Q31,
+// MOVH the int16 for Q15, and both leave int64(k) in the register for the scalar
+// tail (MUL then ASR then a MOVW store that keeps the low 32 bits). dst may alias a
+// exactly: each block/lane reads a before it stores dst. SMULL/SMULL2/SHRN/SHRN2/
+// DUP have no Go assembler mnemonic and are hand-encoded WORD
+// directives with the decoded form in the trailing comment (cross-checked against
+// arm64asm by TestArm64WordEncodings). Frame is two slice headers plus the scalar
+// k: dst+0, a+24, k+48.
+
+// func scaleQ31NEON(dst, a []int32, k int32)
+TEXT ·scaleQ31NEON(SB), NOSPLIT, $0-52
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R3
+    MOVD a_base+24(FP), R1
+    MOVW k+48(FP), R2          // R2 = int64(k), sign-extended int32 (also tail k)
+    WORD $0x4E040C41           // DUP V1.4S, W2   (k in all 4 int32 lanes)
+
+    LSR  $2, R3, R4            // R4 = n / 4
+    CBZ  R4, scaleq31_neon_remainder
+
+scaleq31_neon_loop4:
+    VLD1.P 16(R1), [V0.S4]     // a[i..i+3]
+    WORD $0x0EA1C002           // SMULL V2.2D, V0.2S, V1.2S   (lanes 0,1 -> 2 int64)
+    WORD $0x4EA1C003           // SMULL2 V3.2D, V0.4S, V1.4S  (lanes 2,3 -> 2 int64)
+    WORD $0x0F218444           // SHRN V4.2S, V2.2D, #31   (results 0,1: >>31 then low 32)
+    WORD $0x4F218464           // SHRN2 V4.4S, V3.2D, #31  (results 2,3)
+    VST1.P [V4.S4], 16(R0)
+    SUB  $1, R4
+    CBNZ R4, scaleq31_neon_loop4
+
+scaleq31_neon_remainder:
+    AND  $3, R3
+    CBZ  R3, scaleq31_neon_done
+
+scaleq31_neon_scalar:
+    MOVW.P 4(R1), R5           // a[i], sign-extended to 64-bit
+    MUL  R2, R5, R5            // a[i] * k (64-bit, |p| <= 2^62)
+    ASR  $31, R5, R5           // arithmetic shift right 31
+    MOVW.P R5, 4(R0)           // low 32 bits: wraps like int32()
+    SUB  $1, R3
+    CBNZ R3, scaleq31_neon_scalar
+
+scaleq31_neon_done:
+    RET
+
+// func scaleQ15NEON(dst, a []int32, k int16)
+// Same SMULL/SMULL2 widen as scaleQ31NEON, with the same fused SHRN/SHRN2
+// shift-and-narrow at shift #15 instead of #31 (bit-identical to the two-step
+// SSHR .2D #15 + XTN/XTN2 form; see the header block above). k is a signed
+// int16, sign-extended by MOVH to int64(k); |k * a[i]| <= 2^46, well inside the
+// int64 product.
+TEXT ·scaleQ15NEON(SB), NOSPLIT, $0-50
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R3
+    MOVD a_base+24(FP), R1
+    MOVH k+48(FP), R2          // R2 = int64(k), sign-extended int16 (also tail k)
+    WORD $0x4E040C41           // DUP V1.4S, W2   (k in all 4 int32 lanes)
+
+    LSR  $2, R3, R4            // R4 = n / 4
+    CBZ  R4, scaleq15_neon_remainder
+
+scaleq15_neon_loop4:
+    VLD1.P 16(R1), [V0.S4]     // a[i..i+3]
+    WORD $0x0EA1C002           // SMULL V2.2D, V0.2S, V1.2S   (lanes 0,1 -> 2 int64)
+    WORD $0x4EA1C003           // SMULL2 V3.2D, V0.4S, V1.4S  (lanes 2,3 -> 2 int64)
+    WORD $0x0F318444           // SHRN V4.2S, V2.2D, #15   (results 0,1: >>15 then low 32)
+    WORD $0x4F318464           // SHRN2 V4.4S, V3.2D, #15  (results 2,3)
+    VST1.P [V4.S4], 16(R0)
+    SUB  $1, R4
+    CBNZ R4, scaleq15_neon_loop4
+
+scaleq15_neon_remainder:
+    AND  $3, R3
+    CBZ  R3, scaleq15_neon_done
+
+scaleq15_neon_scalar:
+    MOVW.P 4(R1), R5           // a[i], sign-extended to 64-bit
+    MUL  R2, R5, R5            // k * a[i] (64-bit, |p| <= 2^46)
+    ASR  $15, R5, R5           // arithmetic shift right 15
+    MOVW.P R5, 4(R0)           // low 32 bits: wraps like int32()
+    SUB  $1, R3
+    CBNZ R3, scaleq15_neon_scalar
+
+scaleq15_neon_done:
+    RET
+
+// func gainQ31NEON(dst, a []int32, gain int32, preShift, postShift int)
+// Fused Q31 gain: dst[i] = PSHR32(MULT32_32_Q31(SHL32(a[i], preShift), gain), postShift).
+// The MULT32_32_Q31 core is scaleQ31NEON verbatim (SMULL/SMULL2 widen to int64,
+// SHRN/SHRN2 #31 shift-and-narrow to the low 32 bits; see scaleQ31NEON for why the
+// logical narrow equals the arithmetic one); this kernel wraps it in a pre-shift
+// and a rounding post-shift, all with runtime-broadcast counts:
+//   - SSHL V0.4S,V0.4S,V5.4S applies SHL32 (V5 = preShift in every lane) to the
+//     int32 lanes BEFORE the widen, so the shifted value stays in int32 range and
+//     |x*gain| <= 2^62; SSHL with a non-negative count is a plain wrapping left
+//     shift (overflow bits discarded), matching int32(uint32(a)<<preShift).
+//   - ADD V4.4S,V4.4S,V7.4S adds the rounding bias (V7 = (int32(1)<<postShift)>>1),
+//     wrapping in int32 lanes exactly like libopus PSHR32; bias is 0 at postShift==0.
+//   - SSHL V4.4S,V4.4S,V6.4S with V6 = -postShift is the arithmetic right shift:
+//     a NEGATIVE SSHL count is a signed (sign-preserving) shift right that truncates
+//     toward -inf, and the bias already supplied the round-half-up, so this is PSHR32
+//     without double rounding (SRSHL would double-round). bias uses a 32-bit LSLW +
+//     arithmetic ASRW $1 so postShift==31 sign-extends to 0xC0000000, matching
+//     (int32(1)<<31)>>1. The scalar tail LSLW/MOVW-resign/MUL/ASR #31/ADDW/ASRW
+//     closes out lengths that are not a multiple of 4. New WORDs (SSHL x2, the pre/
+//     post/bias DUPs, ADD .4S) plus the reused scaleQ31NEON encodings are all
+//     cross-checked against arm64asm by TestArm64WordEncodings. Registers: R0=dst,
+//     R1=a, R2=gain, R3=n, R4=blocks, R5=tail sample, R6=preShift, R7=postShift,
+//     R8=-postShift, R9=bias; none are R16/R17/R18/R27/R28. preShift and postShift
+//     must be in [0, 31]. Frame: dst+0, a+24, gain+48, preShift+56, postShift+64.
+TEXT ·gainQ31NEON(SB), NOSPLIT, $0-72
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R3
+    MOVD a_base+24(FP), R1
+    MOVW gain+48(FP), R2          // R2 = int64(gain), sign-extended int32 (also tail gain)
+    WORD $0x4E040C41              // DUP V1.4S, W2   (gain in all 4 int32 lanes)
+
+    MOVD preShift+56(FP), R6      // preShift in [0,31]
+    MOVD postShift+64(FP), R7     // postShift in [0,31]
+    WORD $0x4E040CC5             // DUP V5.4S, W6   (preShift x4, SSHL left count)
+    NEG  R7, R8                   // R8 = -postShift (negative SSHL count = arithmetic >>)
+    WORD $0x4E040D06            // DUP V6.4S, W8   (-postShift x4, SSHL right count)
+    MOVD $1, R9                   // bias = (int32(1)<<postShift)>>1
+    LSLW R7, R9, R9              // 1 << postShift (32-bit, wraps to 0x80000000 at 31)
+    ASRW $1, R9, R9             // arithmetic >>1: 0xC0000000 at 31, else 1<<(postShift-1)
+    WORD $0x4E040D27           // DUP V7.4S, W9   (bias x4)
+
+    LSR  $2, R3, R4              // R4 = n / 4
+    CBZ  R4, gainq31_neon_remainder
+
+gainq31_neon_loop4:
+    VLD1.P 16(R1), [V0.S4]       // a[i..i+3]
+    WORD $0x4EA54400            // SSHL V0.4S, V0.4S, V5.4S   (x = a << preShift, wrapping)
+    WORD $0x0EA1C002           // SMULL V2.2D, V0.2S, V1.2S   (lanes 0,1 -> 2 int64)
+    WORD $0x4EA1C003           // SMULL2 V3.2D, V0.4S, V1.4S  (lanes 2,3 -> 2 int64)
+    WORD $0x0F218444           // SHRN V4.2S, V2.2D, #31   (products 0,1: >>31 then low 32)
+    WORD $0x4F218464           // SHRN2 V4.4S, V3.2D, #31  (products 2,3)
+    WORD $0x4EA78484           // ADD V4.4S, V4.4S, V7.4S    (+ bias, wrapping)
+    WORD $0x4EA64484           // SSHL V4.4S, V4.4S, V6.4S   (arithmetic >> postShift)
+    VST1.P [V4.S4], 16(R0)
+    SUB  $1, R4
+    CBNZ R4, gainq31_neon_loop4
+
+gainq31_neon_remainder:
+    AND  $3, R3
+    CBZ  R3, gainq31_neon_done
+
+gainq31_neon_scalar:
+    MOVW.P 4(R1), R5             // a[i], sign-extended
+    LSLW R6, R5, R5             // x = a << preShift, wraps in the W register
+    MOVW R5, R5                 // re-sign-extend the WRAPPED x to 64-bit
+    MUL  R2, R5, R5            // x * gain (|p| <= 2^62)
+    ASR  $31, R5, R5          // MULT32_32_Q31
+    ADDW R9, R5, R5           // + bias, wraps in 32 bits
+    ASRW R7, R5, R5          // arithmetic >> postShift in 32 bits
+    MOVW.P R5, 4(R0)           // store low 32 bits
+    SUB  $1, R3
+    CBNZ R3, gainq31_neon_scalar
+
+gainq31_neon_done:
+    RET
+
+// func butterflyNEON(lo, hi []int32)
+// In-place radix-2 butterfly, 4 int32 per iteration: each block loads lo and hi,
+// forms the wrapping sum (ADD .4S -> V2) and difference (SUB .4S -> V3) BEFORE
+// storing either, then writes lo = lo+hi and hi = lo-hi. Both loads precede both
+// stores, so each block of lo and hi is read in full before either is written;
+// that ordering is what makes the in-place update safe (and why lo and hi must not
+// overlap). The loads are plain VLD1 with a manual ADD $16 advance because each
+// slice uses a single pointer register for both its load and its store, so a
+// post-increment load (VLD1.P) would advance that pointer before the in-place store
+// and misaddress it. The ADD/SUB .4S
+// WORDs are the addNEON/subNEON encodings with the destination lane in V2 (sum)
+// and V3 (diff); they are cross-checked against arm64asm by TestArm64WordEncodings.
+// The scalar tail computes both results from the unmodified lo/hi in W registers
+// (ADDW/SUBW) so it wraps identically. Frame is two slice headers: lo+0, hi+24.
+TEXT ·butterflyNEON(SB), NOSPLIT, $0-48
+    MOVD lo_base+0(FP), R0
+    MOVD lo_len+8(FP), R3
+    MOVD hi_base+24(FP), R1
+
+    LSR  $2, R3, R4            // R4 = n / 4
+    CBZ  R4, butterfly_neon_remainder
+
+butterfly_neon_loop4:
+    VLD1 (R0), [V0.S4]         // lo
+    VLD1 (R1), [V1.S4]         // hi
+    WORD $0x4EA18402           // ADD V2.4S, V0.4S, V1.4S   (sum = lo + hi)
+    WORD $0x6EA18403           // SUB V3.4S, V0.4S, V1.4S   (diff = lo - hi)
+    VST1 [V2.S4], (R0)         // lo = lo + hi
+    VST1 [V3.S4], (R1)         // hi = lo - hi
+    ADD  $16, R0
+    ADD  $16, R1
+    SUB  $1, R4
+    CBNZ R4, butterfly_neon_loop4
+
+butterfly_neon_remainder:
+    AND  $3, R3
+    CBZ  R3, butterfly_neon_done
+
+butterfly_neon_loop1:
+    MOVW (R0), R5             // lo
+    MOVW (R1), R6             // hi
+    ADDW R6, R5, R7           // R7 = lo + hi (wraps in 32-bit)
+    SUBW R6, R5, R8           // R8 = lo - hi
+    MOVW R7, (R0)             // lo = lo + hi
+    MOVW R8, (R1)             // hi = lo - hi
+    ADD  $4, R0
+    ADD  $4, R1
+    SUB  $1, R3
+    CBNZ R3, butterfly_neon_loop1
+
+butterfly_neon_done:
+    RET
+
+// func maxAbsNEON(a []int32) int32
+// Peak magnitude with celtMaxabs32 semantics, built on the same signed int32
+// min/max reduction as minMaxNEON. Block 0 seeds the running min/max (V0,V1); when
+// there are two or more further blocks a wide path adds a second accumulator pair
+// (V5,V6) and folds two blocks per iteration, keeping two independent SMIN and two
+// independent SMAX chains so the compare latency stays off the loop-carried critical
+// path (same latency-hiding rewrite as minMaxNEON, #283). The second pair is set up
+// only inside that wide branch, so a small input (a single further block) keeps the
+// single-accumulator cost and pays nothing for the unroll (the same guard sumNEON
+// uses for its extra accumulators; measured to avoid a small-n regression). A
+// possible odd trailing block folds into the running accumulators, and when
+// (n mod 4) != 0 the last 4 elements a[n-4:n] are folded in as one overlapping .4S
+// block before the horizontal reduce, so every element stays on the SIMD path (no
+// scalar tail). SMINV/SMAXV then reduce into R5=min/R6=max via FMOVS, and a combine
+// forms max(maxVal, -minVal). NEG forms -minVal with the two's-complement wrap
+// (-MinInt32 == MinInt32); the low 32 bits of the negate are correct regardless of
+// the accumulator's upper bits (FMOVS zero-extends), so the combine compares in
+// 32-bit CMPW and the MOVW store keeps the low 32 bits. The signed CSEL GE picks the
+// larger of maxVal and -minVal. The dispatch gates len(a) >= 4, so block 0 and the
+// a[n-4] overlap block are always in range; signed min/max is idempotent with no
+// accumulation order (re-counting the overlap of already-processed elements, and
+// seeding the second pair from block 0, both double-count harmlessly), so the result
+// matches maxAbsGo. The SMIN/SMAX/SMINV/SMAXV WORDs are the minMaxNEON encodings
+// verbatim (cross-checked by asmcheck_test.go). On Cortex-A76 the overlap tail
+// removes the scalar CSEL remainder (up to 3 iterations) and the 2-block unroll
+// hides the SMIN/SMAX latency in the mid/large-n body: measured about -15% at n=63
+// rising to -30% at n=255 and -38% at n=1023 against the single-accumulator overlap
+// kernel, with the narrow-path guard keeping the smallest inputs (a single further
+// block) from paying for the unroll. Frame is one slice header plus the int32
+// return: a+0, ret+24.
+TEXT ·maxAbsNEON(SB), NOSPLIT, $0-28
+    MOVD a_base+0(FP), R2
+    MOVD a_len+8(FP), R3
+    LSR  $2, R3, R4                  // R4 = full 4-element blocks (>=1, gate floor)
+    VLD1 (R2), [V0.S4]               // min = block 0 (R2 not advanced)
+    VLD1 (R2), [V1.S4]               // max = block 0 (R2 not advanced)
+    SUB  $1, R4                      // R4 = blocks after block 0
+    CBZ  R4, maxabs_neon_overlap     // single block: V0/V1 hold it
+    LSR  $1, R4, R7                 // R7 = pairs = (blocks after 0) / 2
+    CBZ  R7, maxabs_neon_narrow      // one further block only: single-accumulator
+
+    // Wide path: seed a second accumulator pair (V5 min, V6 max) from block 0 and
+    // fold two blocks per iteration. Set up only here, so small n keeps the
+    // single-accumulator cost.
+    VLD1 (R2), [V5.S4]               // min2 = block 0
+    VLD1.P 16(R2), [V6.S4]           // max2 = block 0, advance past block 0
+maxabs_neon_loop:
+    VLD1.P 32(R2), [V2.S4, V3.S4]
+    WORD $0x4EA26C00                 // SMIN V0.4S, V0.4S, V2.4S
+    WORD $0x4EA26421                 // SMAX V1.4S, V1.4S, V2.4S
+    WORD $0x4EA36CA5                 // SMIN V5.4S, V5.4S, V3.4S
+    WORD $0x4EA364C6                 // SMAX V6.4S, V6.4S, V3.4S
+    SUB  $1, R7
+    CBNZ R7, maxabs_neon_loop
+    WORD $0x4EA56C00                 // SMIN V0.4S, V0.4S, V5.4S   (fold the pair)
+    WORD $0x4EA66421                 // SMAX V1.4S, V1.4S, V6.4S
+    TBZ  $0, R4, maxabs_neon_overlap // R4 even => no odd trailing block
+    VLD1.P 16(R2), [V2.S4]           // odd trailing block
+    WORD $0x4EA26C00                 // SMIN V0.4S, V0.4S, V2.4S
+    WORD $0x4EA26421                 // SMAX V1.4S, V1.4S, V2.4S
+    JMP  maxabs_neon_overlap
+
+maxabs_neon_narrow:
+    // Exactly one block after block 0 (R4 == 1). Block 0 is in V0/V1 and R2 still
+    // points at block 0; advance and fold the one remaining block single-accumulator.
+    ADD  $16, R2, R2                 // advance past block 0
+    VLD1 (R2), [V2.S4]               // block 1
+    WORD $0x4EA26C00                 // SMIN V0.4S, V0.4S, V2.4S
+    WORD $0x4EA26421                 // SMAX V1.4S, V1.4S, V2.4S
+
+maxabs_neon_overlap:
+    // Overlapping tail: when (n mod 4) != 0, fold the last 4 elements a[n-4:n] in
+    // as one .4S block before the horizontal reduce, so every element stays on the
+    // SIMD path (no scalar tail). Idempotency makes re-counting the overlap of
+    // already-processed elements harmless; the n >= 4 gate keeps a[n-4] in range.
+    AND  $3, R3, R4
+    CBZ  R4, maxabs_neon_reduce
+    SUB  $4, R3, R7                  // R7 = n - 4 (element index of the overlap block)
+    LSL  $2, R7, R7                 // R7 = (n-4)*4 bytes
+    MOVD a_base+0(FP), R2            // reload base (R2 was advanced past the full blocks)
+    ADD  R7, R2, R2                 // R2 = &a[n-4]
+    VLD1 (R2), [V2.S4]
+    WORD $0x4EA26C00                 // SMIN V0.4S, V0.4S, V2.4S
+    WORD $0x4EA26421                 // SMAX V1.4S, V1.4S, V2.4S
+
+maxabs_neon_reduce:
+    WORD $0x4EB1A803                 // SMINV S3, V0.4S
+    WORD $0x4EB0A824                 // SMAXV S4, V1.4S
+    FMOVS F3, R5                     // R5 = running min (low 32 = int32)
+    FMOVS F4, R6                     // R6 = running max (low 32 = int32)
+
+    // combine: max(maxVal, -minVal)
+    NEG  R5, R7                      // R7 = -min (low 32 = wrapping int32 negate)
+    CMPW R7, R6                      // (R6 - R7), signed 32-bit: max vs -min
+    CSEL GE, R6, R7, R0             // R0 = max(R6, R7) = max(maxVal, -minVal)
+    MOVW R0, ret+24(FP)
+    RET
+
+// func sumSqShiftedQ31NEON(a []int32, shift int) int32
+// Wrapping int32 sum of pre-shifted Q31 squares, 4 int32 per iteration. Each block
+// left-shifts the four int32 lanes by the runtime shift count (SSHL .4S applies
+// SHL32 in 32-bit lanes, so the value stays in int32 range BEFORE the widen), then
+// squares them with a widen-shift-narrow: SMULL/SMULL2 multiply each
+// shifted lane by ITSELF into int64 (lanes 0,1 then 2,3), then SHRN/SHRN2 #31 shift each
+// product right 31 and narrow the low 32 bits back to int32 in one instruction (the
+// square is non-negative and <= 2^62, so the logical shift equals the arithmetic one and
+// the <= 2^31 result narrows exactly: a shifted lane of MinInt32 gives 2^62 >> 31 = 2^31,
+// whose low 32 = MinInt32). VADD .4S accumulates
+// the four terms into a wrapping int32 accumulator, VADDV folds it to a scalar, and
+// the scalar tail closes out (n mod 4): LSLW wraps x in 32 bits, MOVW re-sign-extends
+// it, MUL forms x*x (|x| <= 2^31 so |p| <= 2^62), ASR #31 takes the term, and ADDW
+// accumulates it wrapping. Because wrapping int32 addition is associative, the 4-lane
+// split plus the VADDV fold is bit-identical to sumSqShiftedQ31Go for every input.
+// The DUP/SSHL WORDs are the gainQ31NEON encodings verbatim; the two SMULL/SMULL2 WORDs
+// are those encodings with the multiplier lane set to V0 (self-square, Rm field V1->V0);
+// the SHRN/SHRN2 WORDs are the scaleQ31NEON/gainQ31NEON encodings verbatim
+// (shift-right-narrow by immediate, U=0 opcode 10000, immh:immb field = 2*esize -
+// shift = 64 - 31 = 33). All are cross-checked against arm64asm by
+// TestArm64WordEncodings. The dispatch guarantees shift in [0,31]. Registers R1=a,
+// R3=n, R4=blocks, R5=total, R6=shift, R7=tail sample; V0/V2/V3/V4/V5/V6; none of
+// R16/R17/R18/R27/R28. Frame: a+0, shift+24, ret+32.
+TEXT ·sumSqShiftedQ31NEON(SB), NOSPLIT, $0-36
+    MOVD a_base+0(FP), R1
+    MOVD a_len+8(FP), R3
+    MOVD shift+24(FP), R6
+    WORD $0x4E040CC5             // DUP V5.4S, W6   (shift in all 4 lanes, SSHL count)
+    VEOR V6.B16, V6.B16, V6.B16  // wrapping int32 accumulator = 0
+
+    LSR  $2, R3, R4             // R4 = n / 4
+    CBZ  R4, sumsq_neon_reduce
+
+sumsq_neon_loop4:
+    VLD1.P 16(R1), [V0.S4]      // a[i..i+3]
+    WORD $0x4EA54400            // SSHL V0.4S, V0.4S, V5.4S    (x = a << shift, wrapping)
+    WORD $0x0EA0C002           // SMULL V2.2D, V0.2S, V0.2S   (lanes 0,1 squared -> 2 int64)
+    WORD $0x4EA0C003           // SMULL2 V3.2D, V0.4S, V0.4S  (lanes 2,3 squared -> 2 int64)
+    WORD $0x0F218444           // SHRN V4.2S, V2.2D, #31   (terms 0,1: >>31 then low 32)
+    WORD $0x4F218464           // SHRN2 V4.4S, V3.2D, #31  (terms 2,3)
+    VADD V4.S4, V6.S4, V6.S4   // accumulate (wrapping int32 lanes)
+    SUB  $1, R4
+    CBNZ R4, sumsq_neon_loop4
+
+sumsq_neon_reduce:
+    VADDV V6.S4, V6            // ADDV S6, V6.4S: horizontal wrapping int32 sum
+    FMOVS F6, R5              // R5 = vector total (low 32 = int32)
+
+    AND  $3, R3
+    CBZ  R3, sumsq_neon_done
+
+sumsq_neon_scalar:
+    MOVW.P 4(R1), R7           // a[i], sign-extended
+    LSLW R6, R7, R7           // x = a << shift (wraps in the W register)
+    MOVW R7, R7               // re-sign-extend the WRAPPED x to 64-bit
+    MUL  R7, R7, R7           // x * x (|x| <= 2^31 so |p| <= 2^62)
+    ASR  $31, R7, R7          // MULT32_32_Q31 (square >= 0, arithmetic == logical)
+    ADDW R7, R5, R5           // + term, wrapping int32 add
+    SUB  $1, R3
+    CBNZ R3, sumsq_neon_scalar
+
+sumsq_neon_done:
+    MOVW R5, ret+32(FP)
+    RET
+
+// func firValidQ15NEON(dst, x []int32, taps []int16)
+// int32 valid convolution in correlation orientation with int16 Q15 taps,
+// vectorized over the OUTPUT index: 4 outputs per iteration. For output block i
+// the accumulator V16 starts at zero and, for each tap j, loads the sliding window
+// x[i+j .. i+j+3] (one VLD1 that supplies the tap-j contribution for all 4 outputs
+// at once, since output i+k reads lane k of the window), broadcasts taps[j] (DUP
+// from W2, sign-extended by MOVH), forms the 4 Q15-TRUNCATED products with the
+// exact scaleQ15NEON widen-shift-narrow (SMULL/SMULL2 to int64, SHRN/SHRN2 #15 to
+// the low 32 bits), and ADD .4S-accumulates them (wrapping int32). The
+// window pointer R7 slides by 4 bytes per tap; the taps pointer R8 by 2. After all
+// taps the 4 outputs are stored. The scalar-output tail runs the full inner tap
+// loop per remaining output (MOVH/MOVW sign-extend, MUL, ASR #15, ADDW), so the
+// per-product truncation is preserved and the result is bit-exact with
+// firValidQ15Go. All SMULL/SMULL2/SHRN/SHRN2/DUP WORDs are the scaleQ15NEON
+// encodings verbatim (cross-checked by TestArm64WordEncodings). The dispatch gates
+// n = len(dst) >= 4, and the kernel reads x only up to index n-1+len(taps)-1 <=
+// len(x)-1, so there is no over-read. dst must not overlap x. Frame is dst+x+taps
+// slice headers: dst+0, x+24, taps+48.
+TEXT ·firValidQ15NEON(SB), NOSPLIT, $0-72
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R3         // n = number of outputs
+    MOVD x_base+24(FP), R1         // x base = window base for output block 0
+    MOVD taps_base+48(FP), R6      // taps base (constant)
+    MOVD taps_len+56(FP), R5       // number of taps (>=1)
+
+    LSR  $2, R3, R4               // R4 = n / 4 = full 4-output blocks
+    CBZ  R4, fir_neon_tail
+
+fir_neon_block:
+    VEOR V16.B16, V16.B16, V16.B16 // acc = 0
+    MOVD R1, R7                    // R7 = window pointer = block base
+    MOVD R6, R8                    // R8 = taps pointer
+    MOVD R5, R9                    // R9 = tap counter
+fir_neon_tap:
+    MOVH.P 2(R8), R2             // R2 = taps[j], sign-extended int16 (W2 for DUP)
+    WORD $0x4E040C41            // DUP V1.4S, W2   (taps[j] in all 4 int32 lanes)
+    VLD1 (R7), [V0.S4]          // window x[i+j .. i+j+3]
+    ADD  $4, R7                  // slide window by 1 int32
+    WORD $0x0EA1C002           // SMULL V2.2D, V0.2S, V1.2S   (lanes 0,1 -> 2 int64)
+    WORD $0x4EA1C003           // SMULL2 V3.2D, V0.4S, V1.4S  (lanes 2,3 -> 2 int64)
+    WORD $0x0F318444           // SHRN V4.2S, V2.2D, #15   (results 0,1: >>15 then low 32)
+    WORD $0x4F318464           // SHRN2 V4.4S, V3.2D, #15  (results 2,3)
+    VADD V4.S4, V16.S4, V16.S4  // acc += 4 Q15-truncated products (wrapping)
+    SUB  $1, R9
+    CBNZ R9, fir_neon_tap
+    VST1.P [V16.S4], 16(R0)      // store 4 outputs
+    ADD  $16, R1                 // next block window base
+    SUB  $1, R4
+    CBNZ R4, fir_neon_block
+
+fir_neon_tail:
+    AND  $3, R3, R4              // R4 = n mod 4 = scalar-output tail count
+    CBZ  R4, fir_neon_done
+fir_neon_tail_out:
+    MOVD $0, R11                // acc32 = 0
+    MOVD R1, R7                 // R7 = window pointer for this output
+    MOVD R6, R8                 // R8 = taps pointer
+    MOVD R5, R9                 // R9 = tap counter
+fir_neon_tail_tap:
+    MOVH.P 2(R8), R10          // R10 = int64(taps[j]), sign-extended
+    MOVW.P 4(R7), R12          // R12 = int64(x[i+j]), sign-extended
+    MUL  R10, R12, R12         // taps[j] * x[i+j] (|p| <= 2^46)
+    ASR  $15, R12, R12         // Q15 truncating arithmetic shift
+    ADDW R12, R11, R11         // acc32 += low 32 (wrapping)
+    SUB  $1, R9
+    CBNZ R9, fir_neon_tail_tap
+    MOVW.P R11, 4(R0)          // store output
+    ADD  $4, R1                // next output window base
+    SUB  $1, R4
+    CBNZ R4, fir_neon_tail_out
+
+fir_neon_done:
+    RET
+
+// func firSymValidQ15NEON(dst, x []int32, center int16, pairs []int16)
+// int32 valid convolution in correlation orientation with a SYMMETRIC Q15 tap set
+// (one center tap plus K = len(pairs) mirror pairs, window length 2K+1),
+// vectorized over the OUTPUT index: 4 outputs per iteration. For output block i
+// the center sample sits at c = i+K. The accumulator V16 starts at zero; the
+// center window x[c .. c+3] is loaded (VLD1), center is broadcast (DUP from W2,
+// sign-extended by MOVH), the 4 Q15-TRUNCATED products are formed with the exact
+// scaleQ15NEON widen-shift-narrow (SMULL/SMULL2 to int64, SHRN/SHRN2 #15 to the
+// low 32 bits) and ADD .4S-accumulated. For each pair k in [1,K] the LEFT
+// window x[c-k .. c-k+3] and RIGHT window x[c+k .. c+k+3] are loaded and summed
+// with VADD .4S (wrapping int32) BEFORE the multiply, the
+// single-truncation-per-pair contract that makes this bit-exact with libopus
+// comb_filter_const_c, then pairs[k-1] is broadcast, the products formed with
+// the same widen-shift-narrow, and ADD .4S-accumulated. The center base R7 slides
+// +16 per block; the left pointer R10 slides -4 per pair, the right pointer R11
+// +4, the coeff pointer R8 +2. Both the center and every pair coeff funnel through
+// W2 -> DUP V1.4S,W2 and multiply V0/V1 -> V2/V3, so every SMULL/SMULL2/SHRN/SHRN2/
+// DUP WORD is a scaleQ15NEON encoding verbatim (cross-checked by
+// TestArm64WordEncodings) and NO new hand-encoded WORD is introduced; the left+
+// right VADD is a plain Go-asm mnemonic. The scalar-output tail runs the full
+// center+pairs computation per remaining output, adding each mirror pair as a
+// wrapping int32 sum (MOVWU/ADDW then MOVW sign-extend) before the multiply
+// (MUL/ASR #15/ADD), so the per-pair fold-then-truncate is preserved and the
+// result is bit-exact with firSymValidQ15Go. The dispatch gates n = len(dst) >= 4,
+// and the kernel reads x only up to index (n-1)+2K <= len(x)-1 (and down to x[0]
+// at i=0,k=K), so there is no over-read. dst must not overlap x. Frame is dst+x+
+// center+pairs: dst+0, x+24, center+48, pairs+56 (bytes 50-55 are alignment
+// padding before the 8-byte-aligned pairs slice header).
+TEXT ·firSymValidQ15NEON(SB), NOSPLIT, $0-80
+    MOVD dst_base+0(FP), R0
+    MOVD dst_len+8(FP), R3         // n = number of outputs
+    MOVD x_base+24(FP), R1         // x base
+    MOVD pairs_base+56(FP), R6     // pairs base (constant)
+    MOVD pairs_len+64(FP), R5      // K = number of mirror pairs (>=0)
+
+    LSL  $2, R5, R7               // K*4 bytes
+    ADD  R1, R7, R7              // R7 = &x[K] = center window base for block 0
+
+    LSR  $2, R3, R4               // R4 = n / 4 = full 4-output blocks
+    CBZ  R4, sym_neon_tail
+
+sym_neon_block:
+    VEOR V16.B16, V16.B16, V16.B16 // acc = 0
+    // center contribution
+    MOVH center+48(FP), R2         // center tap, sign-extended (W2 for DUP)
+    WORD $0x4E040C41              // DUP V1.4S, W2   (center in all 4 int32 lanes)
+    VLD1 (R7), [V0.S4]           // center window x[c .. c+3]
+    WORD $0x0EA1C002             // SMULL V2.2D, V0.2S, V1.2S   (lanes 0,1 -> 2 int64)
+    WORD $0x4EA1C003             // SMULL2 V3.2D, V0.4S, V1.4S  (lanes 2,3 -> 2 int64)
+    WORD $0x0F318444             // SHRN V4.2S, V2.2D, #15   (results 0,1: >>15 then low 32)
+    WORD $0x4F318464             // SHRN2 V4.4S, V3.2D, #15  (results 2,3)
+    VADD V4.S4, V16.S4, V16.S4   // acc = center products (wrapping)
+
+    MOVD R5, R9                   // R9 = pair counter = K
+    CBZ  R9, sym_neon_store        // K == 0: center only
+    SUB  $4, R7, R10             // R10 = left pointer, pair k=1 = center - 1 int32
+    ADD  $4, R7, R11             // R11 = right pointer, pair k=1 = center + 1 int32
+    MOVD R6, R8                   // R8 = pairs coeff pointer
+sym_neon_pair:
+    MOVH.P 2(R8), R2             // pairs[k-1], sign-extended, post-inc coeff ptr
+    WORD $0x4E040C41            // DUP V1.4S, W2
+    VLD1 (R10), [V0.S4]         // left window x[c-k .. c-k+3]
+    VLD1 (R11), [V5.S4]         // right window x[c+k .. c+k+3]
+    VADD V5.S4, V0.S4, V0.S4    // left+right, wrapping int32, BEFORE the multiply
+    WORD $0x0EA1C002           // SMULL V2.2D, V0.2S, V1.2S
+    WORD $0x4EA1C003           // SMULL2 V3.2D, V0.4S, V1.4S
+    WORD $0x0F318444           // SHRN V4.2S, V2.2D, #15   (results 0,1: >>15 then low 32)
+    WORD $0x4F318464           // SHRN2 V4.4S, V3.2D, #15  (results 2,3)
+    VADD V4.S4, V16.S4, V16.S4  // acc += 4 Q15-truncated folded products (wrapping)
+    SUB  $4, R10, R10           // next pair: left moves down
+    ADD  $4, R11, R11           // right moves up
+    SUB  $1, R9, R9
+    CBNZ R9, sym_neon_pair
+sym_neon_store:
+    VST1.P [V16.S4], 16(R0)      // store 4 outputs
+    ADD  $16, R7, R7             // next block center base
+    SUB  $1, R4, R4
+    CBNZ R4, sym_neon_block
+
+sym_neon_tail:
+    AND  $3, R3, R4              // R4 = n mod 4 = scalar-output tail count
+    CBZ  R4, sym_neon_done
+sym_neon_tail_out:
+    // center contribution
+    MOVH center+48(FP), R2      // center, sign-extended
+    MOVW (R7), R12              // int64(x[c]), sign-extended
+    MUL  R2, R12, R14           // center * x[c] (|p| <= 2^46)
+    ASR  $15, R14, R14          // Q15 truncating shift; acc in R14
+    MOVD R5, R9                 // R9 = pair counter = K
+    CBZ  R9, sym_neon_tail_store // K == 0
+    SUB  $4, R7, R10            // left pointer = center - 1
+    ADD  $4, R7, R11            // right pointer = center + 1
+    MOVD R6, R8                 // coeff pointer
+sym_neon_tail_pair:
+    MOVH.P 2(R8), R2           // int64(pairs[k-1]), sign-extended, post-inc
+    MOVWU (R10), R12           // left, zero-extended low 32
+    MOVWU (R11), R13           // right, zero-extended low 32
+    ADDW  R13, R12, R12        // (left+right) mod 2^32, wrapping int32, BEFORE truncation
+    MOVW  R12, R12             // sign-extend the int32 sum to int64
+    MUL   R2, R12, R12         // coeff * sum (|p| <= 2^46)
+    ASR   $15, R12, R12        // Q15 truncating shift
+    ADD   R12, R14, R14        // acc += (wrapping; low 32 significant)
+    SUB   $4, R10, R10         // next pair
+    ADD   $4, R11, R11
+    SUB   $1, R9, R9
+    CBNZ  R9, sym_neon_tail_pair
+sym_neon_tail_store:
+    MOVW.P R14, 4(R0)          // store output (low 32), post-inc dst
+    ADD  $4, R7, R7            // next output center base
+    SUB  $1, R4, R4
+    CBNZ R4, sym_neon_tail_out
+
+sym_neon_done:
+    RET

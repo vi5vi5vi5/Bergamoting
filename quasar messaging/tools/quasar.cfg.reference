@@ -1,0 +1,2141 @@
+{
+ "DnsFallbackMap": {
+  "quasar.yandex.net": "213.180.193.230",
+  "quasar.yasmina.yango.com": "99.83.219.141"
+ },
+ "activation_feedback_player": {
+  "probabilities": {
+   "seam_activation_feedback_1": 11,
+   "seam_activation_feedback_2": 22,
+   "seam_activation_feedback_3": 33,
+   "seam_activation_feedback_4": 44,
+   "seam_activation_feedback_5": 55,
+   "seam_activation_feedback_6": 66,
+   "seam_activation_feedback_7": 77,
+   "seam_activation_feedback_8": 88,
+   "seam_activation_feedback_9": 100
+  }
+ },
+ "adbd": {
+  "allDeactivateCmd": "${QUASAR}/activate_adb.sh --all deactivate",
+  "quasmodromActivateCmd": "${QUASAR}/activate_adb.sh --quasmodrom activate",
+  "quasmodromDeactivateCmd": "${QUASAR}/activate_adb.sh --quasmodrom deactivate",
+  "quasmodromNetworkActivateCmd": "${QUASAR}/activate_adb.sh --quasmodrom activate --network"
+ },
+ "adhan_capability": {
+  "melodyStorageDir": "${DATA}/data/adhans/melody_storage/",
+  "stateFilePath": "${DATA}/data/adhans/state.dat"
+ },
+ "alarmd": {
+  "alarmSoundSettingsFile": "${DATA}/data/alarmSoundSettings.dat",
+  "alarmVolumeStepMs": 20000,
+  "dbFileName": "${DATA}/alarms.dat",
+  "finishAlarmUserVolume": 7,
+  "minimumReminderUserVolume": 7,
+  "startAlarmUserVolume": 1
+ },
+ "aliced": {
+  "allowedForRandomLoggingQuasmodromGroups": [
+   "beta"
+  ],
+  "apiKey": "<redacted>",
+  "app_id": "aliced",
+  "app_version": "1.0",
+  "audioInput": {
+   "model_storage": {
+    "customModelsConfigPath": "${DATA}/data/spotter.json",
+    "customModelsPath": "${DATA}/data/spotter_model",
+    "defaultModelsPath": "${QUASAR}/spotter_models",
+    "fallbackModels": {
+     "spotter": {
+      "activation/alisa": {
+       "crc": 2209293208,
+       "fallbackUrls": [
+        "https://quasar.s3.yandex.net/spotters/fynxmdi_ru-RU-bergamot-alisa-13Nov-x3-bnr-minispeakers-29Jan24.zip"
+       ],
+       "format": "zip",
+       "type": "activation",
+       "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/spotters/fynxmdi_ru-RU-bergamot-alisa-13Nov-x3-bnr-minispeakers-29Jan24.zip",
+       "word": "alisa"
+      },
+      "activation/yandex": {
+       "crc": 2588060244,
+       "fallbackUrls": [
+        "https://quasar.s3.yandex.net/spotters/famtiuy_ru-RU-quasar-yandex-svdf-x1-02Dec2022-fixed-lower-thresh-q16-ca-no-bnr-no-ca.zip"
+       ],
+       "format": "zip",
+       "type": "activation",
+       "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/spotters/famtiuy_ru-RU-quasar-yandex-svdf-x1-02Dec2022-fixed-lower-thresh-q16-ca-no-bnr-no-ca.zip",
+       "word": "yandex"
+      },
+      "activation/yasmina": {
+       "crc": 1134983709,
+       "fallbackUrls": [
+        "https://quasar.s3.yandex.net/spotters/kcywglm_ar-SA-quasar-yasmina-22Nov24-x3-v18-orig-target-no-ca.zip"
+       ],
+       "format": "zip",
+       "type": "activation",
+       "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/spotters/kcywglm_ar-SA-quasar-yasmina-22Nov24-x3-v18-orig-target-no-ca.zip",
+       "word": "yasmina"
+      },
+      "command": {
+       "crc": 32608206,
+       "fallbackUrls": [
+        "https://quasar.s3.yandex.net/spotters/ttumb_ru-RU-quasar-commands-10Feb25-08-25-shrd-bt-likes-q16-rt-lower-fah-lower-stops-dislikes-fah-dqmm.zip"
+       ],
+       "format": "zip",
+       "type": "command",
+       "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/spotters/ttumb_ru-RU-quasar-commands-10Feb25-08-25-shrd-bt-likes-q16-rt-lower-fah-lower-stops-dislikes-fah-dqmm.zip"
+      },
+      "counteractivation": {
+       "crc": 3616132310,
+       "fallbackUrls": [
+        "https://quasar.s3.yandex.net/spotters/jzfyotq_counteractivation-local-ab1-tiny-husky-53-bnr.zip"
+       ],
+       "format": "zip",
+       "type": "counteractivation",
+       "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/spotters/jzfyotq_counteractivation-local-ab1-tiny-husky-53-bnr.zip"
+      },
+      "intonationInterruption": {
+       "crc": 2061469633,
+       "fallbackUrls": [
+        "https://quasar.s3.yandex.net/spotters/vtgxn_ru-RU-quasar-intonation-interruption-23Mar26-only-new-singlechannel-data-w-new-ovs-new-dev-0.47-ufs-100.zip"
+       ],
+       "format": "zip",
+       "type": "intonationInterruption",
+       "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/spotters/vtgxn_ru-RU-quasar-intonation-interruption-23Mar26-only-new-singlechannel-data-w-new-ovs-new-dev-0.47-ufs-100.zip"
+      },
+      "vad": {
+       "crc": 3663511528,
+       "fallbackUrls": [
+        "https://quasar.s3.yandex.net/spotters/uitfkcj_vad-human-detector-20Oct23-50k-rt-split.zip"
+       ],
+       "format": "zip",
+       "type": "vad",
+       "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/spotters/uitfkcj_vad-human-detector-20Oct23-50k-rt-split.zip"
+      }
+     }
+    }
+   }
+  },
+  "directiveSequencerStatePath": "${TMP}/directiveSequencerState.proto",
+  "enableUpdateTtsDirectives": true,
+  "experiments": [
+   "tv",
+   "video_omit_youtube_restriction",
+   "music",
+   "general_conversation",
+   "quasar",
+   "enable_reminders_todos",
+   "enable_partials",
+   "music_session",
+   "music_partials",
+   "tv_stream",
+   "quasar_tv",
+   "music_recognizer",
+   "ambient_sound",
+   "search_by_kinopoisk",
+   "change_alarm_sound",
+   "change_alarm_sound_music",
+   "change_alarm_sound_radio",
+   "mm_use_directive_payload_raw"
+  ],
+  "jingle": false,
+  "playCancelEarcon": true,
+  "playRecognitionErrorEarcon": true,
+  "playStartVoiceInputEarcon": true,
+  "playStopRecognitionEarcon": false,
+  "port": 9875,
+  "shortRecognizerModel": "quasar-general",
+  "sk_persistent_storage": "${TMP}/sk_persistent_storage.json",
+  "speechkitLogChannels": [
+   "vqe_0",
+   "vqe_bnr"
+  ],
+  "startDelaySec": 6,
+  "supportedFeatures": [
+   "relative_volume_change",
+   "absolute_volume_change",
+   "multiroom",
+   "multiroom_cluster",
+   "multiroom_audio_client",
+   "multiroom_audio_client_v2",
+   "stereo_pair",
+   "change_alarm_sound",
+   "change_alarm_sound_level",
+   "music_player_allow_shots",
+   "audio_client",
+   "audio_client_hls",
+   "tts_play_placeholder",
+   "publicly_available",
+   "directive_sequencer",
+   "bluetooth_player",
+   "set_alarm_semantic_frame_v2",
+   "set_alarm_semantic_frame_v3",
+   "muzpult",
+   "thin_fm_radio_client",
+   "notifications",
+   "audio_bitrate192",
+   "audio_bitrate320",
+   "prefetch_invalidation",
+   "scled_display",
+   "play_tts_sound_level",
+   "supports_streaming_response",
+   "supports_directive_payload_raw",
+   "supports_inner_directive_payload_raw"
+  ],
+  "uniProxyQuicUrl": "uniproxy-quic.alice.yandex.net:8443/uni.ws",
+  "uniProxyUrl": "wss://uniproxy.alice.yandex.net/uni.ws",
+  "vadEnabled": false,
+  "voiceDialogSettings": {
+   "activationSpotterSettings": {
+    "resetAfterStop": true
+   },
+   "counterActivationPresetName": "Yandex bergamot",
+   "customActivationSpotterSettings": {
+    "resetAfterStop": true
+   },
+   "interruptionSpotterSettings": {
+    "resetAfterStop": true
+   },
+   "intonationInterruptionSpotterSettings": {
+    "resetAfterStop": true
+   },
+   "intonationSpotterSettings": {
+    "resetAfterStop": true
+   },
+   "onlineSpotterValidationDisabledTypes": [
+    "noise-detection",
+    "vad"
+   ],
+   "quicZstdDictFile": "${QUASAR}/zstd.dict",
+   "recognizer": {
+    "spotterSubscribePointShiftMs": -80
+   },
+   "useProtoAliceApi": true,
+   "wsUseZstd": true
+  },
+  "withLocalVins": false
+ },
+ "arpc_client": {
+  "server_url": "https://rpc.alice.yandex.net"
+ },
+ "audioclient": {
+  "controller": {
+   "audioStorage": {
+    "storageHistory": "${DATA}/audioStorageHistory.json",
+    "storagePath": "${TMP}"
+   },
+   "cleanPlayerTimeoutSeconds": 1800,
+   "cleanPlayersPeriodSeconds": 300,
+   "http_client": {
+    "connectionTimeoutMs": 4000,
+    "timeoutMs": 600000
+   },
+   "mediaCacheConfig": {
+    "cacheDirectory": "${TMP}/MediaCache"
+   },
+   "mediaCacheEnabled": false,
+   "playbackParams": {
+    "AUDIO_FILE": {
+     "gstPipeline": "{FILESRC} ! {DECODEBIN} ! {AUDIOCONVERT} ! {AUDIORESAMPLE} ! {CAPS_STEREO} ! {VOLUME_MASTER} ! {SINK}"
+    },
+    "BLUETOOTH_STREAM": {
+     "gstPipeline": "{BLUETOOTHSRC} ! {QUEUE2} ! {AUDIOCONVERT} ! {AUDIORESAMPLE} ! {CAPS_STEREO} ! {VOLUME_MASTER} ! {VOLUME_EQUALIZER} ! {SINK} sync=false",
+     "gstProperties": {
+      "QUEUE2": {
+       "": "queue2",
+       "max-size-buffers": 0,
+       "max-size-bytes": 200000,
+       "max-size-time": 0
+      }
+     }
+    },
+    "OPUS_STREAM": {
+     "flags": [
+      "COMPENSATE_STREAM_UNDERRUN_PTS"
+     ],
+     "gstPipeline": "appsrc name=stream-src ! opusparse ! opusdec ! {VOLUME_MASTER} ! {OPT_SPECTRUM} ! {SINK}",
+     "streamMode": true
+    },
+    "PCM_STREAM": {
+     "gstPipeline": "{STREAM_PIPELINE}",
+     "streamMode": true
+    },
+    "PCM_STREAM_WITH_BUFFER": {
+     "gstPipeline": "{STREAM_PIPELINE}",
+     "gstProperties": {
+      "MULTIQUEUE": {
+       "": "multiqueue",
+       "high-watermark": 0.5,
+       "max-size-time": 1000000000,
+       "use-buffering": "true"
+      }
+     },
+     "streamMode": true
+    },
+    "RADIO": {
+     "gstPipeline": "{MEDIA_PIPELINE}",
+     "gstProperties": {
+      "DECODEBIN": {
+       "connection-speed": "200",
+       "use-buffering": "true"
+      },
+      "SRC": "{SOUPHTTPSRC}"
+     }
+    },
+    "TRACK": {
+     "gstPipeline": "{MEDIA_PIPELINE}",
+     "gstProperties": {
+      "DECODEBIN": {
+       "high-percent": "20",
+       "low-percent": "2",
+       "max-size-bytes": 0,
+       "max-size-time": 15000000000,
+       "use-buffering": "true"
+      },
+      "SOUPHTTPSRC": {
+       "min-location-speed": "15000",
+       "retries": "11",
+       "timeout": "4"
+      },
+      "SRC": "{SOUPHTTPSRC}"
+     }
+    },
+    "TRACK:CACHE": {
+     "gstPipeline": "{MEDIA_PIPELINE}",
+     "gstProperties": {
+      "SRC": "{FILESRC}"
+     }
+    },
+    "TRACK:TMS": {
+     "gstPipeline": "{MEDIA_PIPELINE}",
+     "gstProperties": {
+      "DECODEBIN": {
+       "use-buffering": "true"
+      },
+      "SRC": {
+       "": "mediastreamsrc",
+       "name": "yio_mediastreamsrc"
+      }
+     }
+    },
+    "common": {
+     "deviceName": "default",
+     "gstProperties": {
+      "@yio_decodebin/GstHLSDemux": {
+       "allow-extra-headers": false,
+       "manifest-retries": "0",
+       "manifest-timeout": "4"
+      },
+      "AUDIOCONVERT": "audioconvert name=yio_audioconvert",
+      "AUDIORESAMPLE": "audioresample",
+      "CAPS_STEREO": "audio/x-raw,rate=48000,channels=2,format=S16LE",
+      "DECODEBIN": {
+       "": "decodebin",
+       "name": "yio_decodebin"
+      },
+      "DECRYPT": "{opt_aes_decoding}",
+      "FILESRC": {
+       "": "filesrc",
+       "location": "{file_path}"
+      },
+      "MEDIA_PIPELINE": "{MEDIA_SRC} ! {DECODEBIN} ! {MONO_ATTENUATOR} ! {MEDIA_SINK}",
+      "MEDIA_SINK": "{AUDIOCONVERT} ! {AUDIORESAMPLE} ! {SCALETEMPO} ! {CAPS_STEREO} ! {NORMALIZATION} ! {VOLUME_ALL} ! {SPECTRUM} ! {SINK}",
+      "MEDIA_SRC": "{SRC} ! {DECRYPT}",
+      "MONO_ATTENUATOR": {
+       "": "identity",
+       "name": "yio_mono_attenuator"
+      },
+      "MULTIQUEUE": "identity",
+      "NORMALIZATION": "{opt_normalization}",
+      "OPT_SPECTRUM": "{SPECTRUM}",
+      "SCALETEMPO": "scaletempo",
+      "SINK": "alsasink device={'deviceName'}",
+      "SOUPHTTPSRC": {
+       "": "souphttpsrc",
+       "alt-locations": "{alt-uris}",
+       "location": "{uri}",
+       "max-http-range": "10485760",
+       "name": "yio_souphttpsrc"
+      },
+      "SPECTRUM": "spectrum interval=40000000 bands=513 threshold=-80",
+      "SRC": "@@UNDEFINED@@",
+      "STREAM_PIPELINE": "appsrc name=stream-src format=time ! {input_media_type} ! {MULTIQUEUE} ! {AUDIORESAMPLE} ! {VOLUME_MASTER} ! {OPT_SPECTRUM} ! {SINK}",
+      "VOLUME_ALL": "{VOLUME_MASTER} ! {VOLUME_FADING} ! {VOLUME_EQUALIZER}",
+      "VOLUME_EQUALIZER": "volume name=equalizer-preamp ! equalizer-nbands name=equalizer",
+      "VOLUME_FADING": "volume name=yio_fade",
+      "VOLUME_MASTER": "volume name=volume0"
+     }
+    }
+   },
+   "volume": {}
+  },
+  "gogol": {
+   "senderQueueSize": 30
+  },
+  "port": 9906
+ },
+ "audiod": {
+  "audioDevice": {
+   "alsaControlStashFile": "${TMP}/alsa_controls_stash.json",
+   "deviceName": "default",
+   "inRate": 48000,
+   "mainChannel": "vqe_0",
+   "micChannels": 3,
+   "outRate": 16000,
+   "periodSize": 256,
+   "sampleSize": 2,
+   "spkChannels": 1,
+   "vqe": {
+    "defaultModelStoragePath": "${QUASAR}/vqe_models",
+    "preset": "bergamot",
+    "type": "yandex"
+   }
+  },
+  "brokenMicDetector": {
+   "enabled": true,
+   "rmsRatioExceededCount": 25,
+   "rmsRatioThreshold": 0.8,
+   "sendAudioData": false
+  },
+  "dumpPath": "${TMP}/",
+  "speakerChannelNamesToMusicAnalyze": [
+   "raw_spk_0",
+   "raw_spk_1"
+  ]
+ },
+ "audioinit": {
+  "port": 9883
+ },
+ "audiosender": {
+  "availableChannels": [
+   "raw_mic_0",
+   "raw_mic_1",
+   "raw_mic_2",
+   "raw_spk_0",
+   "vqe_0",
+   "vqe_bnr"
+  ],
+  "dumpingChannels": [
+   "raw_mic_0",
+   "raw_mic_1",
+   "raw_mic_2",
+   "raw_spk_0",
+   "vqe_0",
+   "vqe_bnr"
+  ],
+  "historySeconds": 10,
+  "logLevel": "debug",
+  "playerChannelName": "vqe_0",
+  "runtimeConfigPath": "${DATA}/data/audiosender.json",
+  "sendLogTimeoutSec": 20,
+  "spotterChannelName": "vqe_0",
+  "spotterModelPath": "${QUASAR}/spotter_models/activation/alisa"
+ },
+ "authd": {
+  "accountStorageFile": "account_storage.dat",
+  "authTokenClientId": "<redacted>",
+  "authTokenClientSecret": "<redacted>",
+  "codeUrl": "https://mobileproxy.passport.yandex.net",
+  "deviceName": "Яндекс.Станция Мини 3",
+  "loginUrl": "https://login.yandex.ru",
+  "passportUrl": "https://oauth.yandex.ru",
+  "port": 9878,
+  "xTokenClientId": "<redacted>",
+  "xTokenClientSecret": "<redacted>"
+ },
+ "backend": {
+  "port": 9924
+ },
+ "bio_capability": {
+  "enabled": true,
+  "model_storage": {
+   "customModelsConfigPath": "${DATA}/data/custom_bio_models.json",
+   "customModelsPath": "${DATA}/data/custom_bio_lingware",
+   "defaultModelsPath": "${QUASAR}"
+  },
+  "rss_limit_kb": 5400,
+  "storagePath": "${DATA}/data/bio_storage.json"
+ },
+ "ble_initd": {
+  "enabled": true,
+  "port": 9913,
+  "services": {
+   "configuration": {
+    "characteristics": {
+     "connect": {
+      "permissions": [
+       "write"
+      ],
+      "uuid": "f25d4a0d-6266-4254-943e-3e20606f2fa6"
+     },
+     "deviceId": {
+      "permissions": [
+       "read"
+      ],
+      "uuid": "4276d829-46ce-4ce9-9f30-30dbb9a43724"
+     },
+     "longWriteTest": {
+      "permissions": [
+       "write"
+      ],
+      "uuid": "29d49103-16f4-4fcd-85c7-42d0e43d16d9"
+     },
+     "status": {
+      "permissions": [
+       "read",
+       "notify"
+      ],
+      "protocol": "plain",
+      "uuid": "9879f69f-510f-4a0c-b500-79de90342997"
+     },
+     "token": {
+      "permissions": [
+       "write"
+      ],
+      "uuid": "5b66e7df-1b0f-4a9d-8492-5c3f3b866c80"
+     },
+     "wifiList": {
+      "permissions": [
+       "read"
+      ],
+      "uuid": "e985aa00-e701-4d5d-96b9-f38ae3d7ee16"
+     }
+    },
+    "uuid": "664578b6-c390-42d8-956e-c1ae8b646436"
+   }
+  }
+ },
+ "bluetooth": {
+  "knownDevicesPersistPath": "${DATA}/data/bt_known_devices.dat"
+ },
+ "brickd": {
+  "port": 9898,
+  "subscriptionModeByDefault": false,
+  "subscriptionModeFilename": "${DATA}/data/subscription_mode.dat"
+ },
+ "bug_report": {
+  "allowedCustomCommands": [
+   "iperf"
+  ],
+  "commandLogs": [
+   {
+    "command": "dmesg",
+    "size": 175000
+   }
+  ],
+  "fileLogs": [
+   {
+    "fileName": "${LOGS}/updatesd.log",
+    "size": 175000
+   },
+   {
+    "fileName": "${LOGS}/updatesd.log.1",
+    "size": 175000
+   },
+   {
+    "fileName": "${LOGS}/mediad.log",
+    "size": 175000
+   },
+   {
+    "fileName": "${LOGS}/mediad.log.1",
+    "size": 175000
+   },
+   {
+    "fileName": "${LOGS}/maind.log",
+    "size": 175000
+   },
+   {
+    "fileName": "${LOGS}/maind.log.1",
+    "size": 175000
+   },
+   {
+    "fileName": "${LOGS}/telemetry.log",
+    "size": 175000
+   },
+   {
+    "fileName": "${LOGS}/telemetry.log.1",
+    "size": 175000
+   },
+   {
+    "fileName": "${DATA}/launcher2.log",
+    "size": 175000
+   },
+   {
+    "fileName": "${DATA}/launcher2.1.log",
+    "size": 175000
+   },
+   {
+    "fileName": "${DATA}/launcher2.out",
+    "size": 175000
+   },
+   {
+    "fileName": "${DATA}/alarms.dat",
+    "size": 175000
+   }
+  ]
+ },
+ "builtin_buttons_capability": {
+  "flag_path_override": "${DATA}/data/button_click_prohibited",
+  "supports_blocking_by_user": true
+ },
+ "buttonsClickLimiter": {
+  "badTouch": {
+   "onlyTelemetryMode": false
+  },
+  "goodTouch": {
+   "onlyTelemetryMode": false
+  }
+ },
+ "cachingSoundLogSender": {
+  "dbPath": "${DATA}/soundLogStorageDir",
+  "oldDbPaths": [
+   "${DATA}/soundLogStorage.dat"
+  ]
+ },
+ "capabilitySettingsStorageDir": "${DATA}/data/capability_settings",
+ "capabilityStateStorage": {
+  "DISK": {
+   "path": "${DATA}/data/capability_states.lmdb"
+  },
+  "TMP": {
+   "lazy_init": true,
+   "path": "${TMP}/capability_states.lmdb"
+  }
+ },
+ "chrony": {
+  "disable": "yandex-chrony disable",
+  "enable": "yandex-chrony enable",
+  "pid": "/var/run/chrony/chronyd.pid",
+  "status": "${QUASAR}/chrony-status"
+ },
+ "common": {
+  "AsioPool": {
+   "statisticSampeRate": 1.0
+  },
+  "CallbackQueueFactory": {
+   "statisticSampeRate": 0.15
+  },
+  "accessPointName": "Yandex-Station-Mini-3",
+  "backendUrl": "https://quasar.yandex.net",
+  "bluetoothNamePrefix": "Yandex.Mini3 ",
+  "caCertsFile": "${QUASAR}/ca-certificates.crt",
+  "cryptography": {
+   "keymasterProxySocketPath": "/dev/keymaster_svc"
+  },
+  "curlVerbose": false,
+  "dataDir": "${DATA}",
+  "deviceType": "bergamot",
+  "device_manufacturer": "Yandex",
+  "durationUpdateMainSuggestMS": 6000,
+  "ipc": {
+   "net": [
+    "authd",
+    "firstrund",
+    "network_stats",
+    "networkd",
+    "syncd",
+    "updatesd",
+    "wifid"
+   ],
+   "netImpl": "asio"
+  },
+  "metricaAppId": "aliced",
+  "ntpClientCommand": "${QUASAR}/ntpclient -s -i 10 -c 1 -h",
+  "ntpServers": [
+   "ru.pool.ntp.org"
+  ],
+  "os": "Linux",
+  "os_version": "1.0",
+  "reboot_script": "${QUASAR}/reboot.sh",
+  "robotBackendHost": "scbh.yandex.net",
+  "softwareVersion": "0.369.1.50.4794652521.20261021.117",
+  "tempDir": "${TMP}",
+  "wifiReseter": {
+   "minResetIntervalSec": 120,
+   "noInternet": {
+    "intervalSec": 120,
+    "method": "old"
+   }
+  }
+ },
+ "config_capability": {
+  "port": 9882
+ },
+ "configuration_patch": {
+  "patch_dir": "${DATA}/quasar_patches"
+ },
+ "device_control_panel": {
+  "storage": "${DATA}/data/dcpcStorage"
+ },
+ "do_not_disturb": {
+  "port": 9909,
+  "storage": "${DATA}/data/dndStorage"
+ },
+ "equalizer_controller": {
+  "preventClipping": true,
+  "type": "gstreamer"
+ },
+ "event_sender": {
+  "eventDb": {
+   "dbPath": "${DATA}/data/local_events.lmdb"
+  }
+ },
+ "external": {
+  "port": 9880,
+  "registrationRetries": 3,
+  "serviceName": "Alice",
+  "serviceType": "_quasar._tcp."
+ },
+ "external_commandsd": {
+  "port": 9891
+ },
+ "file_player_capability": {
+  "sound_storage": {
+   "defaultSoundsPath": "${QUASAR}/sounds",
+   "sounds": {
+    "ar-SA": {
+     "crc": 40394178,
+     "fallbackUrls": [
+      "https://quasar.s3.yandex.net/sounds/f974724e-40a4-4d5c-bc8a-453559324467.zip"
+     ],
+     "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/sounds/f974724e-40a4-4d5c-bc8a-453559324467.zip"
+    },
+    "common": {
+     "crc": 3078862965,
+     "fallbackUrls": [
+      "https://quasar.s3.yandex.net/sounds/dd5f03cd-b81e-4711-bd3d-64e2165d10c0.zip"
+     ],
+     "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/sounds/dd5f03cd-b81e-4711-bd3d-64e2165d10c0.zip"
+    },
+    "kk-KZ": {
+     "crc": 1872033773,
+     "fallbackUrls": [
+      "https://quasar.s3.yandex.net/sounds/719ad413-205f-42e8-b6b5-b763b39d74b6.zip"
+     ],
+     "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/sounds/719ad413-205f-42e8-b6b5-b763b39d74b6.zip"
+    },
+    "ru-RU": {
+     "crc": 4141865308,
+     "fallbackUrls": [
+      "https://quasar.s3.yandex.net/sounds/380c37ef-7f5a-4b16-af8a-733e75b7085a.zip"
+     ],
+     "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/sounds/380c37ef-7f5a-4b16-af8a-733e75b7085a.zip"
+    },
+    "tr-TR": {
+     "crc": 3639867869,
+     "fallbackUrls": [
+      "https://quasar.s3.yandex.net/sounds/178c3b4f-fee7-4597-8471-7488af9cf451.zip"
+     ],
+     "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/sounds/178c3b4f-fee7-4597-8471-7488af9cf451.zip"
+    },
+    "uz-UZ": {
+     "crc": 167464111,
+     "fallbackUrls": [
+      "https://quasar.s3.yandex.net/sounds/cef9e4e8-1793-48ef-86de-e90d85238ccc.zip"
+     ],
+     "url": "https://cdnrlh4uplgcoewzir6e.svc.cdn.yandex.net/sounds/cef9e4e8-1793-48ef-86de-e90d85238ccc.zip"
+    }
+   },
+   "soundsPath": "${DATA}/data/sounds"
+  }
+ },
+ "firstrund": {
+  "accessPointName": "Yandex-Station-Mini-3",
+  "httpPort": 8080,
+  "port": 9884,
+  "wifiStoragePath": "${DATA}/data/wifi.dat"
+ },
+ "fluent-bitd": {
+  "Logging": {
+   "file": {
+    "enabled": true,
+    "fileName": "${LOGS}/fluent-bitd.log",
+    "maxBackupIndex": 1,
+    "maxFileSize": "10KB"
+   },
+   "level": "info"
+  },
+  "Minidump": {
+   "enabled": true,
+   "fileName": "minidump/fluent-bitd.dmp",
+   "moveToMetrica": true,
+   "sizeLimitKB": 200
+  },
+  "collectMetricsPeriodMs": 300000,
+  "fluent-bit": {
+   "enabled": true,
+   "tailPaths": [
+    "${LOGS}/*.log",
+    "/var/log/messages"
+   ],
+   "variables": {
+    "clickdaemonHost": "clck.yandex.net",
+    "clickdaemonPort": "443",
+    "clickdaemonUri": "/quasar/write/json/batch",
+    "daemonsLogsDst": "http",
+    "flushInterval": "60",
+    "httpCompress": "gzip",
+    "httpIPv6": "Off",
+    "httpListen": "127.0.0.1",
+    "httpRetryLimit": "5",
+    "httpServer": "Off",
+    "httpServerPort": "10001",
+    "httpTls": "On",
+    "httpWorkers": "2",
+    "ipcLogsDst": "none",
+    "keepAliveMaxRecycle": "2000",
+    "keepAliveTimeout": "30",
+    "kernelLogsDst": "none",
+    "logcatDst": "none",
+    "logcatLogBufferSize": "1048576",
+    "memBufLimit": "1m",
+    "stdout": "Off",
+    "stdoutMatch": "none",
+    "tailBufferChunkSize": "32k",
+    "tailBufferMaxSize": "32k",
+    "tailDbFile": "${TMP}/fluent-bit.db",
+    "tailSkipLongLines": "On"
+   }
+  },
+  "port": 9832,
+  "selfDestroyer": {
+   "memoryLimitRssKB": 55000
+  }
+ },
+ "glagold": {
+  "Logging": {
+   "file": {
+    "enabled": true,
+    "fileName": "${LOGS}/glagold.log",
+    "maxBackupIndex": 1,
+    "maxFileSize": "10KB"
+   },
+   "level": "info"
+  },
+  "Minidump": {
+   "enabled": true,
+   "fileName": "minidump/glagold.dmp",
+   "moveToMetrica": true,
+   "sizeLimitKB": 200
+  },
+  "deviceCacheFile": "${DATA}/devices.json",
+  "disabled": false,
+  "enableEndpointProtocol": true,
+  "externalPort": 1961,
+  "hostnamePrefix": "YandexMini3-",
+  "port": 9899,
+  "servicePrefix": "YandexIOReceiver-",
+  "serviceType": "_yandexio._tcp",
+  "tokensStorage": "${DATA}/gsdkTokens.json"
+ },
+ "http_client": {
+  "caCertsFile": "${QUASAR}/ca-certificates.crt",
+  "maxHostConnections": 2,
+  "maxTotalConnections": 4
+ },
+ "hybrid_request_factory": {
+  "hybrid_voice_inputs_when_backend_unavailable": true
+ },
+ "iohub_clients": {
+  "port": 9910
+ },
+ "iohub_services": {
+  "port": 9903
+ },
+ "iot": {
+  "providers": {
+   "Matter": true,
+   "WiFi": true
+  },
+  "syncEndpoints": true,
+  "syncEndpointsRemoveEnable": true,
+  "systemDiscovery": true
+ },
+ "iot_scenarios": {
+  "dbPath": "${DATA}/data/iot_scenarios.lmdb",
+  "defaultSendIntervalMs": 3600000,
+  "syncOnUpdate": false
+ },
+ "leds": {
+  "clock": {
+   "brightnessFilename": "/sys/class/leds/bergamot:white:clock{loc}/brightness",
+   "frameBuilder": {
+    "degreeIndex": 5,
+    "degreeLocation": {
+     "part": "DEGREE",
+     "position": ""
+    },
+    "digitIndices": [
+     0,
+     1,
+     3,
+     4
+    ],
+    "digitIndicesOffset": 0,
+    "digitParts": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E",
+     "F",
+     "G"
+    ],
+    "digitPartsShifts": {},
+    "digitPositions": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "digitValues": {
+     " ": [],
+     "-": [
+      "G"
+     ],
+     "0": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F"
+     ],
+     "1": [
+      "B",
+      "C"
+     ],
+     "2": [
+      "A",
+      "B",
+      "D",
+      "E",
+      "G"
+     ],
+     "3": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "G"
+     ],
+     "4": [
+      "B",
+      "C",
+      "F",
+      "G"
+     ],
+     "5": [
+      "A",
+      "C",
+      "D",
+      "F",
+      "G"
+     ],
+     "6": [
+      "A",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G"
+     ],
+     "7": [
+      "A",
+      "B",
+      "C"
+     ],
+     "8": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G"
+     ],
+     "9": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "F",
+      "G"
+     ]
+    },
+    "maxBrightness": 255,
+    "middleSymbols": [
+     {
+      "part": "D",
+      "position": "H"
+     },
+     {
+      "part": "D",
+      "position": "L"
+     },
+     {
+      "part": "D",
+      "position": "M"
+     }
+    ],
+    "minBrightness": 0,
+    "plusPositions": [],
+    "scLedStringLength": 6,
+    "symbolIndex": 2,
+    "symbolValues": {
+     " ": [],
+     ":": [
+      {
+       "part": "D",
+       "position": "H"
+      },
+      {
+       "part": "D",
+       "position": "L"
+      }
+     ]
+    },
+    "timeStringLength": 5,
+    "totalLedsCount": 32
+   }
+  }
+ },
+ "localization_config": {
+  "EG": {
+   "arpc_client": {
+    "server_url": "https://rpc.yasmina.yango.com"
+   },
+   "authd": {
+    "codeUrl": "https://mobileproxy.yango.com",
+    "deviceName": "Yasmina Mini 2",
+    "loginUrl": [
+     "https://login.yasmina.yango.com",
+     "https://login.yasmina.funtechservices.com"
+    ],
+    "passportUrl": [
+     "https://oauth.yasmina.yango.com",
+     "https://oauth.yasmina.funtechservices.com"
+    ]
+   },
+   "common": {
+    "backendUrl": [
+     "https://quasar.yasmina.yango.com",
+     "https://quasar.yasmina.funtechservices.com"
+    ],
+    "bluetoothNamePrefix": "Yasmina Mini 2 ",
+    "ntpServers": [
+     "asia.pool.ntp.org"
+    ],
+    "robotBackendHost": [
+     "scbh.yasmina.yango.com",
+     "scbh.yasmina.funtechservices.com"
+    ]
+   },
+   "fluent-bitd": {
+    "fluent-bit": {
+     "variables": {
+      "clickdaemonHost": "clck.yasmina.yango.com"
+     }
+    }
+   },
+   "glagold": {
+    "hostnamePrefix": "yasmina-mini-2-",
+    "servicePrefix": "YangoReceiver-",
+    "serviceType": "_yango._tcp"
+   },
+   "metrica2d": {
+    "consumers": {
+     "clickdaemon": {
+      "endpointUri": "https://clck.yasmina.yango.com/quasar_metrics/write/batch"
+     }
+    }
+   },
+   "metricad": {
+    "appMetricaStartupHost": "https://startup.appmetrica.yango.com"
+   },
+   "teleme3d": {
+    "appMetricaStartupHost": "https://startup.appmetrica.yango.com",
+    "clickdaemon": {
+     "endpointUri": "https://clck.yasmina.yango.com/quasar_metrics/write/batch"
+    }
+   }
+  },
+  "SA": {
+   "arpc_client": {
+    "server_url": "https://rpc.yasmina.yango.com"
+   },
+   "authd": {
+    "codeUrl": "https://mobileproxy.yango.com",
+    "deviceName": "Yasmina Mini 2",
+    "loginUrl": [
+     "https://login.yasmina.yango.com",
+     "https://login.yasmina.funtechservices.com"
+    ],
+    "passportUrl": [
+     "https://oauth.yasmina.yango.com",
+     "https://oauth.yasmina.funtechservices.com"
+    ]
+   },
+   "common": {
+    "backendUrl": [
+     "https://quasar.yasmina.yango.com",
+     "https://quasar.yasmina.funtechservices.com"
+    ],
+    "bluetoothNamePrefix": "Yasmina Mini 2 ",
+    "ntpServers": [
+     "asia.pool.ntp.org"
+    ],
+    "robotBackendHost": [
+     "scbh.yasmina.yango.com",
+     "scbh.yasmina.funtechservices.com"
+    ]
+   },
+   "fluent-bitd": {
+    "fluent-bit": {
+     "variables": {
+      "clickdaemonHost": "clck.yasmina.yango.com"
+     }
+    }
+   },
+   "glagold": {
+    "hostnamePrefix": "yasmina-mini-2-",
+    "servicePrefix": "YangoReceiver-",
+    "serviceType": "_yango._tcp"
+   },
+   "metrica2d": {
+    "consumers": {
+     "clickdaemon": {
+      "endpointUri": "https://clck.yasmina.yango.com/quasar_metrics/write/batch"
+     }
+    }
+   },
+   "metricad": {
+    "appMetricaStartupHost": "https://startup.appmetrica.yango.com"
+   },
+   "teleme3d": {
+    "appMetricaStartupHost": "https://startup.appmetrica.yango.com",
+    "clickdaemon": {
+     "endpointUri": "https://clck.yasmina.yango.com/quasar_metrics/write/batch"
+    }
+   }
+  }
+ },
+ "maind": {
+  "Logging": {
+   "file": {
+    "enabled": true,
+    "fileName": "${LOGS}/maind.log",
+    "maxBackupIndex": 1,
+    "maxFileSize": "110KB"
+   },
+   "level": "info",
+   "moduleSinks": {
+    "chip": {
+     "file": {
+      "enabled": true,
+      "fileName": "${LOGS}/chip.log",
+      "maxBackupIndex": 1,
+      "maxFileSize": "110KB"
+     }
+    }
+   }
+  },
+  "Minidump": {
+   "enabled": true,
+   "fileName": "minidump/maind.dmp",
+   "moveToMetrica": true,
+   "saveExceptionMessage": true,
+   "sizeLimitKB": 200
+  },
+  "buttonsSettings": {
+   "bluetoothMinTimeBetweenClicks": 50,
+   "buttonNextPressTimeout": 1000,
+   "buttonReleaseTimeout": 1000,
+   "defaultNextPressThreshold": 60,
+   "defaultTogglePressedThreshold": 200
+  },
+  "lastMonotonicClockFile": "${TMP}/power_off_timestamp",
+  "powerOnMetricsSentOnceGuard": "${TMP}/device_power_on_metrica_guard",
+  "selfDestroyer": {
+   "memoryLimitRssKB": 69800
+  },
+  "versionsProviderSettings": {
+   "cachedVerionFile": "${DATA}/data/version_cache.dat",
+   "versionSendGuardFile": "${TMP}/version_state_sent"
+  }
+ },
+ "matter": {
+  "certStorePath": "${QUASAR}/matter/paa",
+  "chipDbFileName": "${DATA}/data/matter/chip.lmdb",
+  "devicesDbFileName": "${DATA}/data/matter/devices.lmdb",
+  "enableCdTestKeySupport": true,
+  "enableSystemDiscovery": true,
+  "ota": {
+   "availableUpdateTtlSec": 14400,
+   "cleanupIntervalSec": 1800,
+   "enabled": true,
+   "otaDbFileName": "${DATA}/data/matter/ota.lmdb",
+   "storagePath": "${DATA}/data/matter/ota_storage/",
+   "storageSizeLimitKb": 6144,
+   "storageTtlSec": 43200
+  }
+ },
+ "mediad": {
+  "Logging": {
+   "file": {
+    "enabled": true,
+    "fileName": "${LOGS}/mediad.log",
+    "maxBackupIndex": 1,
+    "maxFileSize": "10KB"
+   },
+   "level": "info"
+  },
+  "Minidump": {
+   "enabled": true,
+   "fileName": "minidump/mediad.dmp",
+   "moveToMetrica": true,
+   "sizeLimitKB": 200
+  },
+  "ResolverCache": {
+   "cacheLock": true,
+   "enabled": true,
+   "hosts": {
+    "storage.mds.yandex.net": [
+     "213.180.204.158",
+     "2a02:6b8::158"
+    ]
+   }
+  },
+  "apiUrl": "wss://ws.api.music.yandex.net/quasar/websocket",
+  "playbackParams": {
+   "deviceName": "default",
+   "gstPipeline": "souphttpsrc name=yio_souphttpsrc location={'uri'} ! {opt_aes_decoding} ! decodebin use-buffering=true ! audioconvert ! audioresample ! capsfilter name=capsfilter0 caps=\"audio/x-raw,rate=48000,channels=2,format=S16LE\" ! {opt_normalization} ! volume name=volume0 ! volume name=equalizer-preamp ! equalizer-nbands name=equalizer ! spectrum interval=40000000 bands=513 threshold=-80 ! alsasink device={deviceName}"
+  },
+  "port": 9900,
+  "selfDestroyer": {
+   "memoryLimitRssKB": 48800
+  }
+ },
+ "memoryProfiling": {
+  "maind": {
+   "dumpFile": "${TMP}/memoryDumpFileMaind.prof",
+   "enabled": true
+  }
+ },
+ "metrica2d": {
+  "port": 9904
+ },
+ "metricad": {
+  "port": 9887
+ },
+ "monitord": {
+  "disksList": [
+   "ubi0_0",
+   "ubi1_0"
+  ],
+  "metricsCollectorPeriodSec": 10,
+  "metricsDumperPeriodSec": 300,
+  "partitionsBlacklist": [
+   "/",
+   "/dev",
+   "/dev/shm",
+   "/etc/unbound",
+   "/etc/wifi/w1"
+  ],
+  "pinger": {
+   "pings": [
+    {
+     "host": "quasar.yandex.ru",
+     "intervalMs": 10000,
+     "timeoutMs": 10000
+    }
+   ],
+   "socketType": "raw"
+  },
+  "port": 9895,
+  "pstorePath": "/sys/fs/pstore",
+  "servicesList": "quasar_launcher2,updatesd,mediad,telemetry,platformd,fluent-bitd"
+ },
+ "multiroomd": {
+  "latency_ms": 0,
+  "port": 11124
+ },
+ "net_clock": {
+  "port": 11125
+ },
+ "network_stats": {
+  "port": 9926
+ },
+ "networkd": {
+  "port": 9917
+ },
+ "notificationd": {
+  "port": 9907
+ },
+ "ntpd": {
+  "customConfig": "${DATA}/data/ntpd_custom_config",
+  "engine": "chrony",
+  "ipCacheFile": "${DATA}/data/ntp_ip_cache",
+  "monotonicClockFile": "${DATA}/data/monotonic_time",
+  "port": 9911,
+  "syncCheckPeriodSec": 18000,
+  "syncEnabled": true,
+  "syncEnabledMarkerFile": "${DATA}/ntpd_sync_enabled",
+  "syncFluctuationMSec": 1000,
+  "syncInitialPeriodSec": 5,
+  "syncParams": {
+   "maxMeasuringCount": 20,
+   "sufficientMeasuringCount": 5
+  },
+  "syncRebootMarkerFile": "${TMP}/ntpFirstSync",
+  "timeOverHttpDelaySec": 0,
+  "timeOverHttpUrl": "http://scbh.yandex.net/generate_204",
+  "tryRouterNtpServer": false
+ },
+ "patterns": {
+  "DATA": "/data/quasar",
+  "LOGS": "${DATA}/daemons_logs",
+  "QUASAR": "/system/vendor/quasar",
+  "TMP": "/tmp"
+ },
+ "phone_calls": {
+  "ats_manager": true,
+  "enabled": true,
+  "pjsip": {
+   "account_media_config": {
+    "srtp_mode": 2
+   },
+   "account_nat_config": {
+    "contact_rewrite_method": 0,
+    "contact_rewrite_use": false
+   },
+   "audio_sink": {
+    "audio_media_transmit_param": {
+     "level": 1
+    },
+    "derive_period_size_from_sample_rate": true,
+    "period_size": 256
+   },
+   "audio_source": {
+    "audio_media_transmit_param": {
+     "level": 1
+    },
+    "channel": "vqe_gain",
+    "period_size": 256
+   },
+   "codecs_priority": {
+    "opus/48000": 150
+   },
+   "media_config": {
+    "no_vad": true
+   },
+   "register_on_add": false,
+   "sip_local_port": 5081,
+   "sip_remote_port": 5081,
+   "sip_use_tcp": true,
+   "sip_use_tls": true,
+   "tls_config": {
+    "ca_list_file": "${QUASAR}/ca-certificates.crt",
+    "verify_server": true
+   }
+  }
+ },
+ "platformd": {
+  "AsioPool": {
+   "threadCount": 12
+  },
+  "useAsioPool": true
+ },
+ "setupd": {
+  "port": 9912,
+  "secretMsgList": [
+   {
+    "cmd": "${QUASAR}/activate_adb.sh --sound activate",
+    "hash": "e3f77c35be199786c08f8eb32b921aedacb067c6"
+   },
+   {
+    "cmd": "fw_setenv factory_mode 0",
+    "hash": "88b2cfca52b1134e6cf5ea905d1ece6d4564bdae"
+   },
+   {
+    "cmd": "fw_setenv factory_mode 1",
+    "hash": "3b5b89de943cf90590d4ca4ea33ae0a0af7446a9"
+   },
+   {
+    "cmd": "fw_setenv factory_mode 2",
+    "hash": "e6611aa3316d8a65517ec034845f7ffa5f23e261"
+   },
+   {
+    "cmd": "qc_leds_test",
+    "hash": "63262310cd8dcecd21a860e26e824eaa9dacbe3f",
+    "runtime": true
+   },
+   {
+    "cmd": "qc_buttons_test",
+    "hash": "588146b720455db045528ebdeef492b5ca1af838",
+    "runtime": true
+   },
+   {
+    "cmd": "qc_sweep_tone",
+    "hash": "6027f017b24bc452065100cb52c5b314626a032a",
+    "runtime": true
+   },
+   {
+    "cmd": "qc_bt_discoverable_on",
+    "hash": "4b92379b343ce24748b193f8f7786b69fc8d3a6d",
+    "runtime": true
+   },
+   {
+    "cmd": "qc_send_version_to_backend",
+    "hash": "783dccecbb09fbef5de9f735a47d1b40ff86789c",
+    "runtime": true
+   },
+   {
+    "cmd": "clock_leds_test",
+    "hash": "f42cb13cb5c004f705f381f2e4daf8a3cd88d778",
+    "runtime": true
+   },
+   {
+    "cmd": "qc_sweep_clock_buttons",
+    "hash": "42d8828b606e54bdc83c38d7a446e760bb45d671",
+    "runtime": true
+   }
+  ]
+ },
+ "smart_volume": {
+  "disabledDirectives": [
+   "sound_set_level",
+   "volume_set"
+  ],
+  "enabled": true,
+  "percentThresholds": [
+   {
+    "from": 0,
+    "to": [
+     {
+      "upperThresh": null,
+      "vol": 10
+     }
+    ]
+   },
+   {
+    "from": 14.9999,
+    "to": [
+     {
+      "upperThresh": 32.15,
+      "vol": null
+     },
+     {
+      "upperThresh": null,
+      "vol": 30
+     }
+    ]
+   },
+   {
+    "from": 24.9999,
+    "to": [
+     {
+      "upperThresh": 37.15,
+      "vol": null
+     },
+     {
+      "upperThresh": null,
+      "vol": 40
+     }
+    ]
+   },
+   {
+    "from": 34.9999,
+    "to": [
+     {
+      "upperThresh": 42.65,
+      "vol": null
+     },
+     {
+      "upperThresh": null,
+      "vol": 50
+     }
+    ]
+   },
+   {
+    "from": 44.9999,
+    "to": [
+     {
+      "upperThresh": 48.15,
+      "vol": null
+     },
+     {
+      "upperThresh": null,
+      "vol": 60
+     }
+    ]
+   },
+   {
+    "from": 54.9999,
+    "to": [
+     {
+      "upperThresh": 53.65,
+      "vol": null
+     },
+     {
+      "upperThresh": null,
+      "vol": 70
+     }
+    ]
+   },
+   {
+    "from": 64.9999,
+    "to": [
+     {
+      "upperThresh": 48.15,
+      "vol": 40
+     },
+     {
+      "upperThresh": null,
+      "vol": null
+     }
+    ]
+   },
+   {
+    "from": 74.9999,
+    "to": [
+     {
+      "upperThresh": 53.65,
+      "vol": 50
+     },
+     {
+      "upperThresh": null,
+      "vol": null
+     }
+    ]
+   },
+   {
+    "from": 84.9999,
+    "to": [
+     {
+      "upperThresh": 59.15,
+      "vol": 60
+     },
+     {
+      "upperThresh": null,
+      "vol": null
+     }
+    ]
+   },
+   {
+    "from": 94.9999,
+    "to": [
+     {
+      "upperThresh": 64.65,
+      "vol": 70
+     },
+     {
+      "upperThresh": null,
+      "vol": null
+     }
+    ]
+   },
+   {
+    "from": 100,
+    "to": [
+     {
+      "upperThresh": 68.65,
+      "vol": 80
+     },
+     {
+      "upperThresh": null,
+      "vol": null
+     }
+    ]
+   }
+  ],
+  "skipFrames": 31,
+  "soundWindowSize": 256,
+  "splCalibShift": 124.3,
+  "splCalibSilence": -150,
+  "splQuantile": 0.15,
+  "volumeChangeDisableTimeout": 300,
+  "volumeLevelSplsPercent": [
+   {
+    "spl": 24.9,
+    "vol": 10
+   },
+   {
+    "spl": 29.4,
+    "vol": 20
+   },
+   {
+    "spl": 34.5,
+    "vol": 30
+   },
+   {
+    "spl": 40.1,
+    "vol": 40
+   },
+   {
+    "spl": 45.7,
+    "vol": 50
+   },
+   {
+    "spl": 51.2,
+    "vol": 60
+   },
+   {
+    "spl": 56.7,
+    "vol": 70
+   },
+   {
+    "spl": 62.1,
+    "vol": 80
+   },
+   {
+    "spl": 67.3,
+    "vol": 90
+   },
+   {
+    "spl": 70.2,
+    "vol": 100
+   }
+  ],
+  "volumeRestoreRule": "save_if_manual",
+  "volumeSelectionStrategy": "percent"
+ },
+ "sound_initd": {
+  "firstrundHttpClientTimeoutSec": 130
+ },
+ "stereo_pair": {
+  "port": 9921,
+  "storage": "${DATA}/data/stereoPairStorage"
+ },
+ "sweep_tone": {
+  "beginFreq": 50.0,
+  "dbfsOffset": 15.0,
+  "endFreq": 9000.0,
+  "sweepCount": 3,
+  "sweepDuration": 3
+ },
+ "syncd": {
+  "configPath": "${DATA}/data/user_config.dat",
+  "port": 9897
+ },
+ "teleme3d": {
+  "apiKey": "<redacted>",
+  "appMetricaStartupHost": "https://startup.mobile.yandex.net",
+  "appmetrica": {
+   "envKeysBlacklist": {},
+   "events": {
+    "NetInterfaceGotAddress": true,
+    "NetInterfaceUp": true,
+    "associationFailed": true,
+    "connectionStats": true,
+    "directiveCompleted": true,
+    "directiveHandled": true,
+    "directiveStarted": true,
+    "emptyIp": true,
+    "emptyIpFixed": true,
+    "emptyNetworks": true,
+    "emptyNetworksFixed": true,
+    "emptyScan": true,
+    "emptyScanFixed": true,
+    "internetRecovery": true,
+    "internetRecoveryFail": true,
+    "internetRecoveryStart": true,
+    "internetRecoverySuccess": true,
+    "phraseSpottedWithoutInternet": true,
+    "pings": true,
+    "processStart": true,
+    "setupConfigurationError": true,
+    "systemMetrics": true,
+    "wifiConnect": true,
+    "wifiDisconnect": true,
+    "wifiReport": true,
+    "wifiReset": true,
+    "wrongIp": true,
+    "wrongIpFixed": true,
+    "ysk_error_network": true,
+    "ysk_error_timeout": true
+   },
+   "mode": "black"
+  },
+  "appmetricaFallbackHosts": [
+   "https://report.appmetrica.yandex.net"
+  ],
+  "clickdaemon": {
+   "endpointUri": "https://clck.yandex.net/quasar_metrics/write/batch",
+   "envKeysBlacklist": {},
+   "events": {
+    "AnimationDownloadFail": true,
+    "AnimationUrlListDownloadFail": true,
+    "AudioError": true,
+    "SmartVolumeChangeAccountEnableness": true,
+    "VqeOnDspRestarted": true,
+    "YandexMusicPlayTrackTimeout": true,
+    "YandexMusicSwitchTrackTimeout": true,
+    "addAlarm": true,
+    "addGuestUserFailed": true,
+    "addGuestUserSuccess": true,
+    "alarmDirectiveReceived": true,
+    "alarmSoundFallbackDirectiveFailed": true,
+    "alarmSoundFallbackMediaNotConfirmed": true,
+    "aliceRequest": true,
+    "audioClientAltUrlChanged": true,
+    "audioClientAppSrcUnderrun": true,
+    "audioClientBufferUnderrun": true,
+    "audioClientError": true,
+    "audioClientPlayOnFailed": true,
+    "audioClientPlayRequest": true,
+    "audioClientStartedFromPrev": true,
+    "audioClientStartedFromTtsEnd": true,
+    "audioClientStartedFromVoiceInput": true,
+    "audioDeviceStats": true,
+    "authTokenRefreshError": true,
+    "authTokenRefreshException": true,
+    "authTokenRefreshSuccess": true,
+    "backendStatusChanged": true,
+    "bioAddAccountCancelEnrollment": true,
+    "bioAddAccountFailed": true,
+    "bioAddAccountRemoveEnrollment": true,
+    "bioAddAccountSuccess": true,
+    "bioAddAccountTimeout": true,
+    "bioAddEnrolledPersonFailed": true,
+    "bioAddEnrolledPersonSuccess": true,
+    "bioCommitEnrollmentSuccess": true,
+    "bioCustomModelDownloadFailed": true,
+    "bioCustomModelDownloadSuccess": true,
+    "bioEngineException": true,
+    "bioEnrollmentCancelSuccess": true,
+    "bioEnrollmentFailed": true,
+    "bioEnrollmentFinishSuccess": true,
+    "bioEnrollmentHeadersChanged": true,
+    "bioEnrollmentStartSuccess": true,
+    "bioEnrollmentTimeout": true,
+    "bioEnrollmentsCompatibilityError": true,
+    "bioIncompatibleEngineForClassification": true,
+    "bioLibraryDiagnosticData": true,
+    "bioLogStorage": true,
+    "bioRemoveAccountFailed": true,
+    "bioRemoveAccountSuccess": true,
+    "bioSendEnrollmentSemanticFrame": true,
+    "bioShareEnrolledPersonFailed": true,
+    "bioShareEnrolledPersonSendAddDirective": true,
+    "bioShareEnrolledPersonSuccess": true,
+    "bioSoundEnrollmentFailed": true,
+    "bluetooth_devices_list": true,
+    "bluetooth_source_connected": true,
+    "bluetooth_source_disconnected": true,
+    "bluetooth_transport_metrics": true,
+    "cachableCapabilityNoListeners": true,
+    "capabilityEventsSendingFailed": true,
+    "capabilityEventsSendingStart": true,
+    "capabilityEventsSendingSuccess": true,
+    "changeAccountError": true,
+    "changeAccountSuccess": true,
+    "clearGuestUserFailed": true,
+    "clearGuestUserSuccess": true,
+    "dcpcLoadScenarioFailed": true,
+    "dcpcSaveScenarioFailed": true,
+    "dcpcScenarioStateChange": true,
+    "dcpcSendCallback": true,
+    "dcpcSettingsParseFailed": true,
+    "dcpcStorageSaveFailed": true,
+    "deleteAccount": true,
+    "deleteAccountError": true,
+    "deleteAccountSuccess": true,
+    "device_power_on": true,
+    "directiveCompleted": true,
+    "directiveHandled": true,
+    "directiveStarted": true,
+    "dsp_info": true,
+    "equalizerStats": true,
+    "failedGetSyncInfoRequest": true,
+    "failedSetupNetwork": true,
+    "getNextRequest": true,
+    "getNextRequestFailed": true,
+    "glagolPlayMusic": true,
+    "historicalCapabilityEventsFlush": true,
+    "historicalCapabilityEventsSendingFailure": true,
+    "historicalCapabilityEventsSendingNotReady": true,
+    "historicalCapabilityEventsSendingSuccess": true,
+    "http_request": true,
+    "hybrid_request": true,
+    "invalidProtoDirective": true,
+    "iotDeviceStatusDuration": true,
+    "iotDirectiveResult": true,
+    "iotDiscoveryResult": true,
+    "iotDiscoverySessionResult": true,
+    "iotDiscoverySessionStart": true,
+    "iotProviderInitResult": true,
+    "iotScenariosLaunchFailed": true,
+    "iotScenariosLaunchFinished": true,
+    "ledDisplayAnimationStart": true,
+    "localIotScenarioConditionTriggered": true,
+    "localIotScenarioLaunched": true,
+    "localRecognitionData": true,
+    "local_analytics_info": true,
+    "local_request": true,
+    "local_scenario_log": true,
+    "log_error": true,
+    "matter_diagnostics_event": true,
+    "mediaEndpointAbort": true,
+    "mediaEndpointSuicide": true,
+    "mediadPlaybackError": true,
+    "minidump": true,
+    "minidump_on_update": true,
+    "musicPlayerBackendErrorMessage": true,
+    "musicPlayerBufferStalled": true,
+    "musicPlayerClientDisconnect": true,
+    "musicPlayerClientReconnect": true,
+    "musicPlayerConnectionFail": true,
+    "musicPlayerFailToStartTrack": true,
+    "musicPlayerFailedInRow": true,
+    "notifyOnAudioPlaybackError": true,
+    "notifyOnAudioPlaybackErrorRaw": true,
+    "notifyOnPlaybackError": true,
+    "ntpException": true,
+    "ntpSync": true,
+    "pauseTimer": true,
+    "phoneCallsAcceptedCall": true,
+    "phoneCallsAccountConnected": true,
+    "phoneCallsAccountDisconnected": true,
+    "phoneCallsAccountInvalidated": true,
+    "phoneCallsCallEnded": true,
+    "phoneCallsCallFailed": true,
+    "phoneCallsCancelledCall": true,
+    "phoneCallsConnectWaitTimeoutError": true,
+    "phoneCallsDeclinedCall": true,
+    "phoneCallsHeartbeat": true,
+    "phoneCallsHeartbeatRingtoneIncoming": true,
+    "phoneCallsHeartbeatRingtoneOutgoing": true,
+    "phoneCallsIncomingCall": true,
+    "phoneCallsOutgoingCall": true,
+    "phoneCallsStreamStats": true,
+    "phraseSpotted": true,
+    "phraseSpottedWithoutInternet": true,
+    "pings": true,
+    "playAlarm": true,
+    "player_start": true,
+    "press_button_activate": true,
+    "press_button_bluetooth": true,
+    "press_button_left_activate": true,
+    "press_button_mute_key": true,
+    "press_button_mute_state": true,
+    "press_button_play_pause": true,
+    "press_button_power": true,
+    "press_button_right_activate": true,
+    "press_button_touch": true,
+    "press_button_volume_down": true,
+    "press_button_volume_up": true,
+    "processStart": true,
+    "process_suicide": true,
+    "progressHeartbeatMusic": true,
+    "progressHeartbeatRadio": true,
+    "progressHeartbeatVideo": true,
+    "pstore": true,
+    "refreshTokenEmptyResponse": true,
+    "refreshTokenError": true,
+    "removeAlarm": true,
+    "requestAccountError": true,
+    "requestAccountException": true,
+    "requestAccountSuccess": true,
+    "requestAuthTokenEmptyResponse": true,
+    "requestAuthTokenError": true,
+    "requestTokenEmptyResponse": true,
+    "requestTokenError": true,
+    "requestUidEmptyResponse": true,
+    "requestUidError": true,
+    "resumeTimer": true,
+    "revokeTokenEmptyResponse": true,
+    "revokeTokenError": true,
+    "revokeTokenException": true,
+    "revokeTokenSuccess": true,
+    "scenario_timings": true,
+    "setupConfigurationError": true,
+    "smartVolumeLog": true,
+    "soundLogRecordRemoved": true,
+    "spotterCommand": true,
+    "spotter_validation_timeout": true,
+    "startAudio": true,
+    "startMediaAlarm": true,
+    "startRequest": true,
+    "systemAlertOccured": true,
+    "systemMetrics": true,
+    "telinkNcpSendFail": true,
+    "tooShortAdhanSchedule": true,
+    "track_failed": true,
+    "track_start": true,
+    "updateAuthTokenError": true,
+    "updateAuthTokenException": true,
+    "updateAuthTokenSuccess": true,
+    "wrongAdhanId": true,
+    "xTokenRefreshError": true,
+    "xTokenRefreshException": true,
+    "xTokenRefreshSuccess": true,
+    "ysk_error_audio_encoding": true,
+    "ysk_error_audio_interrupted": true,
+    "ysk_error_audio_recorder": true,
+    "ysk_error_client": true,
+    "ysk_error_invalid_api_key": true,
+    "ysk_error_model": true,
+    "ysk_error_model_multichannel": true,
+    "ysk_error_network": true,
+    "ysk_error_network_text_input": true,
+    "ysk_error_no_speech_detected": true,
+    "ysk_error_no_text_to_synthesize": true,
+    "ysk_error_ok": true,
+    "ysk_error_pong_timeout_elapsed": true,
+    "ysk_error_recording_permissions": true,
+    "ysk_error_server": true,
+    "ysk_error_server_speech_input": true,
+    "ysk_error_spotting_rejected": true,
+    "ysk_error_streaming_response_timeout": true,
+    "ysk_error_timeout": true,
+    "ysk_error_tts": true,
+    "ysk_error_workingthread_block": true,
+    "ysk_error_workingthread_global": true,
+    "ysk_first_synthesis_chunk": true,
+    "ysk_last_synthesis_chunk": true,
+    "ysk_log_ack_received": true,
+    "ysk_log_go_away": true,
+    "ysk_log_sent": true,
+    "ysk_recognition_begin": true,
+    "ysk_spotter_confirmation": true,
+    "ysk_spotter_queue_overflow": true,
+    "ysk_time_voicedialog_request": true,
+    "ysk_time_ws_connect": true,
+    "ysk_tts_player_begin": true,
+    "ysk_tts_player_end": true,
+    "ysk_uniproxy_raised_decode_protobuf": true,
+    "ysk_uniproxy_raised_encode_protobuf": true,
+    "ysk_uniproxy_raised_parse_protobuf": true,
+    "ysk_voicedialog_cancel": true,
+    "ysk_voicedialog_conlost_network_error": true,
+    "ysk_voicedialog_conlost_others": true,
+    "ysk_voicedialog_conlost_pong_timeout": true,
+    "ysk_voicedialog_connection_opened": true,
+    "ysk_voicedialog_go_away": true,
+    "ysk_voicedialog_open_connection": true,
+    "ysk_voicedialog_reconnect": true,
+    "ysk_voicedialog_start_music_input": true,
+    "ysk_voicedialog_start_vins_request": true,
+    "ysk_voicedialog_start_voice_input": true,
+    "ysk_voicedialog_vins_response": true,
+    "zeroChunkDetected": true,
+    "zigbeeEnterBootloaderFailed": true,
+    "zigbeeFirmwareUpdateFailed": true,
+    "zigbeeNCPInitFailed": true,
+    "zigbeeNcpException": true,
+    "zigbeeNcpReset": true
+   },
+   "maxEventsInBatch": 50,
+   "metricaMetadataPath": "${DATA}/data/metrica/clickdaemon/metadata.json",
+   "mode": "white"
+  },
+  "dbPath": "${TMP}/teleme3d",
+  "dbSizeLimitMB": 5,
+  "envKeysBlacklist": {},
+  "eventBlacklist": [
+   "pings",
+   "systemMetrics",
+   "directiveHandled",
+   "directiveStarted",
+   "directiveCompleted"
+  ],
+  "metricaSessionIdPersistentPart": "${DATA}/data/metrica/session_id_part.txt",
+  "metricaSessionIdTemporaryPart": "${TMP}/metrica/session_id_part.txt",
+  "noSyncClock": false,
+  "persistentAppmetrica": {
+   "events": {
+    "NetInterfaceGotAddress": true,
+    "NetInterfaceUp": true,
+    "associationFailed": true,
+    "connectionStats": true,
+    "emptyIp": true,
+    "emptyIpFixed": true,
+    "emptyNetworks": true,
+    "emptyNetworksFixed": true,
+    "emptyScan": true,
+    "emptyScanFixed": true,
+    "internetRecovery": true,
+    "internetRecoveryFail": true,
+    "internetRecoveryStart": true,
+    "internetRecoverySuccess": true,
+    "phraseSpottedWithoutInternet": true,
+    "processStart": true,
+    "setupConfigurationError": true,
+    "wifiConnect": true,
+    "wifiDisconnect": true,
+    "wifiReport": true,
+    "wifiReset": true,
+    "wrongIp": true,
+    "wrongIpFixed": true,
+    "ysk_error_network": true,
+    "ysk_error_timeout": true
+   },
+   "mode": "white"
+  },
+  "persistentBatcher": {
+   "enabled": true,
+   "lookForNetworkConnection": true,
+   "maxBatchCollectingWhenNoInternetTimeSec": 360,
+   "maxStorageSizeMb": 1,
+   "storagePath": "${DATA}/appmetrica/persistedBatch",
+   "syncPeriodSec": 360
+  },
+  "priorities": {
+   "high": [
+    "ysk_error_network",
+    "ysk_error_timeout"
+   ],
+   "highest": [
+    "device_power_on",
+    "wifiReset",
+    "wifiStats",
+    "phraseSpottedWithoutInternet",
+    "local_request",
+    "hybrid_request",
+    "local_analytics_info",
+    "setupConfigurationError",
+    "internetRecovery",
+    "associationFailed",
+    "emptyScan",
+    "emptyScanFixed",
+    "emptyIp",
+    "emptyIpFixed",
+    "wrongIp",
+    "wrongIpFixed",
+    "emptyNetworks",
+    "emptyNetworksFixed",
+    "wifiConnect",
+    "wifiDisconnect",
+    "NetInterfaceUp",
+    "NetInterfaceGotAddress",
+    "wifiReport"
+   ],
+   "low": [
+    "glagold_heartbeat",
+    "minidump"
+   ],
+   "lowest": [
+    "http_request",
+    "multiroomClockDiff",
+    "cpu_info",
+    "multiroomAround"
+   ]
+  },
+  "reservedSizeMB": 3
+ },
+ "telemetry": {
+  "Logging": {
+   "file": {
+    "enabled": true,
+    "fileName": "${LOGS}/telemetry.log",
+    "maxBackupIndex": 1,
+    "maxFileSize": "10KB"
+   },
+   "level": "info"
+  },
+  "Minidump": {
+   "enabled": true,
+   "fileName": "minidump/telemetry.dmp",
+   "moveToMetrica": true,
+   "sizeLimitKB": 200
+  },
+  "selfDestroyer": {
+   "checkPeriodSeconds": 3600,
+   "memoryLimitRssKB": 39500
+  }
+ },
+ "traffic_monitor": {
+  "counterBin": "${QUASAR}/yio_iptables_count.sh",
+  "periodSec": 1200,
+  "sampleRate": 0.11
+ },
+ "update_health_check": {
+  "minidump_enabled": false,
+  "port": 9908
+ },
+ "updatesd": {
+  "Logging": {
+   "file": {
+    "enabled": true,
+    "fileName": "${LOGS}/updatesd.log",
+    "maxBackupIndex": 1,
+    "maxFileSize": "10KB"
+   },
+   "level": "info"
+  },
+  "Minidump": {
+   "enabled": false,
+   "fileName": "minidump/updatesd.dmp",
+   "moveToMetrica": true,
+   "sizeLimitKB": 200
+  },
+  "applyUpdateScript": "${QUASAR}/device_ota_update.sh",
+  "otaScriptPublicKey": "${QUASAR}/ota_script.pub",
+  "port": 9889,
+  "randomWaitLimitSec": 5400,
+  "updateInfoPath": "${DATA}/data/update-info.json",
+  "updatesDir": "/bkupgrade",
+  "updatesExt": ".img"
+ },
+ "volume_capability": {
+  "changeStepMs": 10000,
+  "changeStepPercent": 5,
+  "volumeDbLevels": {
+   "bergamot": [
+    21.9,
+    27.2,
+    32.1,
+    37.3,
+    42.9,
+    48.4,
+    53.7,
+    59.2,
+    64.5,
+    69.7,
+    73.9
+   ]
+  },
+  "volume_manager_settings": {
+   "platformToAlsaMap": "{ \"0\": 0, \"1\" : 33, \"20\": 255}"
+  }
+ },
+ "volume_manager": {
+  "port": 9922
+ },
+ "wifi_capability": {
+  "enabledByDefault": true
+ },
+ "wifid": {
+  "Logging": {
+   "file": {
+    "enabled": true,
+    "fileName": "${LOGS}/wifid.log",
+    "maxBackupIndex": 1,
+    "maxFileSize": "10KB"
+   },
+   "level": "info"
+  },
+  "Minidump": {
+   "enabled": true,
+   "fileName": "minidump/wifid.dmp",
+   "moveToMetrica": true,
+   "sizeLimitKB": 200
+  },
+  "generate204": {
+   "controlUrls": [
+    "http://www.google.com/generate_204"
+   ]
+  },
+  "maxStoredWifiNetworks": 1,
+  "port": 9877
+ },
+ "yio_audio": {
+  "port": 9850
+ },
+ "zenoh": {
+  "storageDbPath": "${DATA}/data/zenoh/devices.lmdb"
+ }
+}
