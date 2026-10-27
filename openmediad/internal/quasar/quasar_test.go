@@ -150,6 +150,15 @@ func cmd(parts ...[]byte) AudioCommand {
 func TestClassify(t *testing.T) {
 	voice := pb.AppendBytes(nil, 22, player(2, "72daa5dc", ""))
 	audio := pb.AppendBytes(nil, 22, player(1, "76006c91", "44683635"))
+	file := pb.AppendBytes(nil, 22, pb.AppendUint(pb.AppendString(pb.AppendUint(nil, 1, 4), 2, "f1e2d3c4"), 4, 1))
+	// дескриптор плеера файлов: {4:4 19:0 25:путь 50:0} (50 внутри дескриптора — не команда кроссфейда)
+	fileDesc := func(path string) []byte {
+		d := pb.AppendUint(pb.AppendUint(nil, 4, 4), 19, 0)
+		if path != "" {
+			d = pb.AppendString(d, 25, path)
+		}
+		return pb.AppendUint(d, 50, 0)
+	}
 	url := "https://strm.example.net/track"
 	cases := []struct {
 		name string
@@ -168,6 +177,10 @@ func TestClassify(t *testing.T) {
 		{"кроссфейд", cmd(audio, pb.AppendBytes(nil, 50, pb.AppendUint(nil, 1, 244100))), CmdCrossfade},
 		{"эквалайзер", cmd(pb.AppendBytes(nil, 35, pb.AppendUint(nil, 2, 1)), pb.AppendString(nil, 52, "onEqualizerConfig")), CmdEqualizer},
 		{"фокус", cmd(pb.AppendUint(nil, 39, 1)), CmdFocus},
+		{"файл: старт звонка", cmd(pb.AppendBytes(nil, 1, fileDesc("/system/vendor/quasar/sounds/common/timer.wav")), file), CmdFileStart},
+		{"файл: release звонка", cmd(file, pb.AppendString(nil, 31, "")), CmdRelease},
+		{"файл: без пути — не старт", cmd(pb.AppendBytes(nil, 1, fileDesc("")), file), CmdOther},
+		{"путь у плеера музыки — не файл", cmd(pb.AppendBytes(nil, 1, fileDesc("/x.wav")), audio), CmdOther},
 		{"прочее", cmd(pb.AppendUint(nil, 77, 1)), CmdOther},
 	}
 	for _, c := range cases {

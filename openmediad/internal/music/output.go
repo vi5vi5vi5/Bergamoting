@@ -6,6 +6,9 @@ import (
 	"io"
 	"math"
 	"time"
+
+	"openmediad/internal/clock"
+	"openmediad/internal/spectrum"
 )
 
 // Start начинает (или продолжает) вывод трека. Для ещё не открытого трека вывод сам дождётся звука.
@@ -22,8 +25,22 @@ func (e *Engine) Start(id string) {
 	t.playing = true
 	t.outGen++
 	gen := t.outGen
+	prev := t.loopDone
+	done := make(chan struct{})
+	t.loopDone = done
 	t.mu.Unlock()
-	go e.outLoop(t, gen)
+	go e.outLoop(t, gen, prev, done)
+}
+
+// audioLatency — через сколько после записи в aplay звук слышен: старт PCM и буфер смесителя. По замерам до запуска PCM
+// ядром проходит 14–30 мс; оценка нужна только для возврата звука при паузе и для позиции.
+const audioLatency = 40 * time.Millisecond
+
+func (e *Engine) now() time.Time {
+	if e.Now != nil {
+		return e.Now()
+	}
+	return time.Now()
 }
 
 // Pause останавливает вывод; источник, буфер и позиция остаются (как кэш плееров mediad).
@@ -129,7 +146,17 @@ func (e *Engine) Pos(id string) uint64 {
 	t.mu.Lock()
 	base, idx := t.baseMs, t.idx
 	t.mu.Unlock()
-	pos := base + t.played.Load()/pcmBytesPerMs
+	played := t.played.Load()
+	if at := t.outAt.Load(); at != 0 { // идёт вывод: позиция не может опережать часы (байты в трубе ещё не прозвучали)
+		el := e.now().Sub(time.Unix(0, at)) - audioLatency
+		if el < 0 {
+			el = 0
+		}
+		if byClock := t.outPlayed.Load() + uint64(el/time.Millisecond)*pcmBytesPerMs; byClock < played {
+			played = byClock
+		}
+	}
+	pos := base + played/pcmBytesPerMs
 	if idx != nil && pos > idx.DurationMs {
 		pos = idx.DurationMs
 	}
@@ -161,17 +188,31 @@ func (e *Engine) Shutdown() {
 
 // outLoop гонит PCM трека из буфера в aplay, пока не сменится поколение вывода. В конце трека доигрывает остаток
 // и сообщает Finished; при остановке (пауза, закрытие) обрывает aplay сразу.
-func (e *Engine) outLoop(t *track, gen int) {
+func (e *Engine) outLoop(t *track, gen int, prev, done chan struct{}) {
+	defer close(done)
+	if prev != nil {
+		<-prev // прежний цикл должен успеть вернуть непрозвучавшее в буфер, прежде чем начнёт читать этот
+	}
 	sk, err := e.NewSink()
 	if err != nil {
 		e.logf("вывод: %v", err)
 		return
 	}
-	done := false // aplay уже доиграл и закрыт (иначе при выходе его обрываем)
+	finished := false // aplay уже доиграл и закрыт (иначе при выходе его обрываем)
+	an := e.startSpectrum(t)
+	startAt := e.now()
+	startPlayed := t.played.Load()
+	t.mu.Lock()
+	startSess := t.sess
+	t.mu.Unlock()
+	t.outPlayed.Store(startPlayed)
 	defer func() {
-		if !done {
+		if !finished {
 			sk.Abort()
+			e.rewindLost(t, startSess, gen, startAt, startPlayed)
 		}
+		t.outAt.Store(0)
+		e.stopSpectrum(t, an)
 	}()
 	buf := make([]byte, chunkBytes)
 	norm := math.Pow(10, t.src.GainDB/20) // нормализация трека к −14 LUFS
@@ -201,7 +242,7 @@ func (e *Engine) outLoop(t *track, gen int) {
 			same := t.sess == s && t.outGen == gen && !t.closed
 			t.mu.Unlock()
 			if same {
-				done = true
+				finished = true
 				e.finish(t, sk)
 			}
 			return
@@ -214,11 +255,44 @@ func (e *Engine) outLoop(t *track, gen int) {
 		}
 		target := math.Float64frombits(e.gainBits.Load()) * norm
 		cur = applyGain(buf[:n], cur, target)
+		if an != nil {
+			an.Write(buf[:n]) // спектр считается по тому же звуку, что уходит на динамик (после нормализации и приглушения)
+		}
 		if _, err := sk.Write(buf[:n]); err != nil {
 			e.logf("вывод: запись в aplay: %v", err)
 			return
 		}
 		t.played.Add(uint64(n))
+		t.outAt.CompareAndSwap(0, startAt.UnixNano()) // «играет» с момента первой записи цикла
+	}
+}
+
+// rewindLost вызывается при выходе из цикла вывода. Если цикл остановила пауза (та же сессия, трек жив), то часть
+// записанного в aplay до динамика не дошла: труба и буферы aplay и смесителя держат до ≈0,5 с, а Abort их выбрасывает. Этот
+// звук возвращается в буфер, и после «продолжи» трек идёт с того места, где реально замолчал, без провала.
+func (e *Engine) rewindLost(t *track, startSess *session, gen int, startAt time.Time, startPlayed uint64) {
+	if e.NoRewind {
+		return
+	}
+	t.mu.Lock()
+	// outGen изменился: была пауза (возможно, уже и новый Start поверх неё: он ждёт завершения этого цикла)
+	pause := !t.closed && t.sess == startSess && t.outGen != gen && startSess != nil
+	t.mu.Unlock()
+	if !pause {
+		return
+	}
+	written := t.played.Load() - startPlayed
+	audible := uint64(0)
+	if el := e.now().Sub(startAt) - audioLatency; el > 0 {
+		audible = uint64(el/time.Millisecond) * pcmBytesPerMs
+	}
+	if written <= audible {
+		return
+	}
+	lost := int((written - audible) / 4 * 4) // целое число стереокадров
+	if k := startSess.ring.Rewind(lost); k > 0 {
+		t.played.Add(^uint64(k) + 1) // played -= k
+		e.logf("пауза: возвращено в буфер %d мс звука, не дошедшего до динамика", k/pcmBytesPerMs)
 	}
 }
 
@@ -233,8 +307,9 @@ func (e *Engine) finish(t *track, sk PCMSink) {
 	}
 }
 
-// applyGain умножает отсчёты S16LE на громкость, плавно меняя её от cur к target в пределах порции.
-// Возвращает громкость к концу порции.
+// applyGain умножает отсчёты S16LE на громкость, плавно меняя её от cur к target в пределах порции (не больше
+// ductRampPerCh за порцию). Возвращает громкость к концу порции. Арифметика целочисленная (Q16 и Q32): на колонке
+// вариант с math.Max/Round на каждый отсчёт съедал около 3 % ядра.
 func applyGain(b []byte, cur, target float64) float64 {
 	if cur == 1 && target == 1 {
 		return 1
@@ -247,15 +322,35 @@ func applyGain(b []byte, cur, target float64) float64 {
 	if d := target - cur; math.Abs(d) > ductRampPerCh {
 		next = cur + math.Copysign(ductRampPerCh, d)
 	}
+	if next == cur { // постоянная громкость: обычный случай
+		g := int32(math.Round(cur * 65536))
+		for i := 0; i < n; i++ {
+			put16(b[2*i:], scale16(int32(int16(binary.LittleEndian.Uint16(b[2*i:]))), g))
+		}
+		return next
+	}
+	g := int64(cur * (1 << 32))                          // громкость Q32 в начале порции
+	step := int64((next - cur) * (1 << 32) / float64(n)) // шаг на отсчёт
 	for i := 0; i < n; i++ {
-		g := cur + (next-cur)*float64(i)/float64(n)
-		v := float64(int16(binary.LittleEndian.Uint16(b[2*i:]))) * g
-		binary.LittleEndian.PutUint16(b[2*i:], uint16(int16(math.Max(-32768, math.Min(32767, math.Round(v))))))
+		put16(b[2*i:], scale16(int32(int16(binary.LittleEndian.Uint16(b[2*i:]))), int32(g>>16)))
+		g += step
 	}
 	return next
 }
 
-func sleepShort() { time.Sleep(10 * time.Millisecond) }
+// scale16 умножает отсчёт на громкость в Q16 с округлением и ограничением по диапазону int16.
+func scale16(v, g int32) int16 {
+	x := (int64(v)*int64(g) + 32768) >> 16
+	switch {
+	case x > 32767:
+		return 32767
+	case x < -32768:
+		return -32768
+	}
+	return int16(x)
+}
+
+func put16(b []byte, v int16) { binary.LittleEndian.PutUint16(b, uint16(v)) }
 
 // fadeIn плавно поднимает громкость от нуля на первых left байтах PCM; возвращает, сколько ещё осталось.
 func fadeIn(b []byte, left int) int {
@@ -270,3 +365,77 @@ func fadeIn(b []byte, left int) int {
 	}
 	return rem * 2
 }
+
+// TrackInfo — снимок трека движка для отладочной страницы.
+type TrackInfo struct {
+	ID      string  `json:"id"`
+	Title   string  `json:"title,omitempty"`
+	Playing bool    `json:"playing"`
+	Opened  bool    `json:"opened"`
+	PosMs   uint64  `json:"pos_ms"`
+	GotKB   uint64  `json:"downloaded_kb"`
+	TotalKB uint64  `json:"total_kb"`
+	RingMs  int     `json:"buffered_ms"`
+	NormDB  float64 `json:"norm_db"`
+}
+
+// Snapshot возвращает открытые треки: сколько скачано, сколько звука в буфере, играет ли.
+func (e *Engine) Snapshot() []TrackInfo {
+	e.mu.Lock()
+	e.init()
+	ts := make([]*track, 0, len(e.tracks))
+	for _, t := range e.tracks {
+		ts = append(ts, t)
+	}
+	e.mu.Unlock()
+	out := make([]TrackInfo, 0, len(ts))
+	for _, t := range ts {
+		t.mu.Lock()
+		ti := TrackInfo{ID: t.id[:min(8, len(t.id))], Title: t.src.Title, Playing: t.playing, Opened: t.opened, NormDB: t.src.GainDB}
+		s := t.sess
+		t.mu.Unlock()
+		ti.PosMs = e.Pos(t.id)
+		ti.GotKB, ti.TotalKB = t.got.Load()>>10, uint64(max(t.tot.Load(), 0))>>10
+		if s != nil {
+			ti.RingMs = s.ring.Len() / pcmBytesPerMs
+		}
+		out = append(out, ti)
+	}
+	return out
+}
+
+// SpectrumEvent — событие потока спектра (общий тип для музыки и голоса).
+type SpectrumEvent = spectrum.Event
+
+// startSpectrum открывает поток спектра трека: первый вывод — Start, возобновление после паузы — Resume с тем же потоком.
+func (e *Engine) startSpectrum(t *track) *spectrum.Analyzer {
+	if e.OnSpectrum == nil {
+		return nil
+	}
+	t.mu.Lock()
+	id := t.spec
+	kind := spectrum.KindResume
+	if id == 0 {
+		id = uint64(clock.Mono())
+		t.spec = id
+		kind = spectrum.KindStart
+	}
+	t.mu.Unlock()
+	e.OnSpectrum(SpectrumEvent{Kind: kind, Source: spectrum.SourceMusic, Stream: id, At: time.Now()})
+	return spectrum.New(func(db []float32) {
+		e.OnSpectrum(SpectrumEvent{Kind: spectrum.KindData, Source: spectrum.SourceMusic, Stream: id, DB: db, At: time.Now()})
+	})
+}
+
+// stopSpectrum сообщает об остановке потока (пауза, конец, закрытие).
+func (e *Engine) stopSpectrum(t *track, an *spectrum.Analyzer) {
+	if an == nil {
+		return
+	}
+	t.mu.Lock()
+	id := t.spec
+	t.mu.Unlock()
+	e.OnSpectrum(SpectrumEvent{Kind: spectrum.KindStop, Source: spectrum.SourceMusic, Stream: id, At: time.Now()})
+}
+
+func sleepShort() { time.Sleep(10 * time.Millisecond) }

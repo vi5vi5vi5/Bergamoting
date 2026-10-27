@@ -362,3 +362,26 @@ func TestChainedStreams(t *testing.T) {
 		t.Errorf("после третьего потока Samples()=%d, ждали %d", s.Samples(), nA+nB+nA)
 	}
 }
+
+// PreSkipTap отдаёт выброшенные pre-skip отсчёты, а вместе с основным выводом они дают всё, что декодер выдал бы без подрезки.
+func TestPreSkipTapReceivesTrimmedSamples(t *testing.T) {
+	stream, preSkip := buildTone(t, 440, 20, 64000, 255)
+	s, _ := New()
+	var tapped []byte
+	s.PreSkipTap = func(pcm []byte) { tapped = append(tapped, pcm...) }
+	out := decodeAll(t, s, stream, len(stream))
+	if len(tapped) != preSkip*2 {
+		t.Fatalf("в PreSkipTap пришло %d байт, ждали pre-skip %d отсчётов = %d байт", len(tapped), preSkip, preSkip*2)
+	}
+	// без Tap вывод тот же: Tap только подсматривает
+	s2, _ := New()
+	if got := decodeAll(t, s2, stream, len(stream)); !bytes.Equal(got, out) {
+		t.Fatal("PreSkipTap не должен менять основной вывод")
+	}
+	s.Reset()
+	tapped = tapped[:0]
+	decodeAll(t, s, stream, 7)
+	if len(tapped) != preSkip*2 {
+		t.Fatalf("после Reset и другой нарезки в Tap %d байт, ждали %d", len(tapped), preSkip*2)
+	}
+}

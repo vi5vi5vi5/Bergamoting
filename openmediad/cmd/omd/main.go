@@ -13,6 +13,8 @@
 //	omd shim [-listen 127.0.0.1:19906] [-upstream 127.0.0.1:9906] [-src 127.0.0.2] [-stats 30s] [-v [-mono]] [-music]
 //	    прозрачный посредник перед audioclient (фаза 2): кадры пересылаются как есть, ведётся сводка;
 //	    -music (фаза 3): музыку Яндекса играет сам шим, откат на mediad при ошибке потока;
+//	omd timeline [-progress] [-voice] файл.pcap
+//	    сжатая шкала команд и событий плеера, как их видела платформа (рассылка на 4 соединения схлопывается);
 //	omd shimcheck [-client 19906] [-service 9906] [-src 127.0.0.2] файл.pcap
 //	    по записи tcpdump обеих сторон шима сверяет кадры (хэши) и считает добавляемую шимом задержку.
 package main
@@ -25,10 +27,13 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"openmediad/internal/clock"
 	"openmediad/internal/obs"
+	"openmediad/internal/wire"
 )
 
 func main() {
@@ -55,6 +60,8 @@ func main() {
 		err = shimCheck(os.Args[2:])
 	case "music-test":
 		err = musicTest(os.Args[2:])
+	case "timeline":
+		err = timelineCmd(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -73,7 +80,8 @@ func usage() {
   omd voice-play [-dev default] [-start-delay 1] [-prespawn] [-repeat N] файл.ogg   (только на колонке)
   omd shim [-listen 127.0.0.1:19906] [-upstream 127.0.0.1:9906] [-src 127.0.0.2] [-stats 30s] [-v [-mono]] [-music]
   omd shimcheck [-client 19906] [-service 9906] [-src 127.0.0.2] файл.pcap
-  omd music-test -url URL -key HEX [-from мс] [-for 15s]   (на колонке: один поток Яндекса движком music)`)
+  omd music-test -url URL -key HEX [-from мс] [-for 15s]   (на колонке: один поток Яндекса движком music)
+  omd timeline [-progress] [-voice] файл.pcap   (сжатая шкала команд и событий плеера: то, что видела платформа)`)
 }
 
 func observe(args []string) error {
@@ -124,6 +132,7 @@ func pcap(args []string) error {
 	voiceDir := fs.String("voice-dir", "", "сохранять голос Алисы (Ogg/Opus) файлами .ogg в этот каталог")
 	dump := fs.Bool("dump", false, "после команд и событий плеера печатать дерево полей целиком")
 	dumpMax := fs.Int("dump-max", 160, "-dump: обрезать значения длиннее стольких байт")
+	dumpTypes := fs.String("dump-types", "", "-dump: номера типов сообщений через запятую (по умолчанию 8,127); например 85 — iohub")
 	fs.Parse(args)
 	if fs.NArg() != 1 {
 		usage()
@@ -143,5 +152,16 @@ func pcap(args []string) error {
 		defer f.Close()
 		in = f
 	}
-	return obs.DecodePcap(in, obs.Opt{Progress: *progress, Noisy: *noisy, VoiceDir: *voiceDir, Dump: *dump, DumpMax: *dumpMax}, os.Stdout)
+	return obs.DecodePcap(in, obs.Opt{Progress: *progress, Noisy: *noisy, VoiceDir: *voiceDir, Dump: *dump, DumpMax: *dumpMax, DumpTypes: parseTypes(*dumpTypes)}, os.Stdout)
+}
+
+// parseTypes разбирает «8,127,85» в набор типов сообщений.
+func parseTypes(s string) map[wire.Type]bool {
+	out := map[wire.Type]bool{}
+	for _, f := range strings.Split(s, ",") {
+		if n, err := strconv.Atoi(strings.TrimSpace(f)); err == nil {
+			out[wire.Type(n)] = true
+		}
+	}
+	return out
 }

@@ -333,3 +333,94 @@ func TestPausedCacheKeepsOnlyOneAndExpires(t *testing.T) {
 		t.Fatal("закрытый кэш усыновлять нельзя")
 	}
 }
+
+func TestHandoffPausesPlayingOnly(t *testing.T) {
+	r := newRig(t)
+	r.m.Handle(nil, playCmd("p1", "t1", 0))
+	r.m.Opened("p1", 200_000)
+	r.advance(4 * time.Second)
+	r.m.Handle(nil, prefetchCmd("p2", "t2")) // предзагруженный, но не запущенный: события не нужны
+	n0 := len(r.events())
+	r.m.Handoff()
+	got := r.events()[n0:]
+	if len(got) != 1 || got[0].kind() != 1 || got[0].state() != 4 || got[0].player() != "p1" {
+		t.Fatalf("после Handoff ждём одно событие PAUSED для p1, получено %d", len(got))
+	}
+	if p := got[0].pos(); p < 3900 || p > 4300 {
+		t.Fatalf("позиция в PAUSED %d мс, ждали ≈4000", p)
+	}
+	if !r.be.has("pause p1") {
+		t.Fatal("бэкенд должен остановить вывод")
+	}
+	if v, _ := pb.Uint(got[0].body, 7); v == 0 {
+		t.Fatal("у PAUSED должно быть время остановки (поле 7)")
+	}
+	r.advance(5 * time.Second)
+	if len(r.events()) != n0+1 {
+		t.Fatal("после Handoff события прогресса идти не должны")
+	}
+	// повторный Handoff ничего не добавляет
+	r.m.Handoff()
+	if len(r.events()) != n0+1 {
+		t.Fatal("плеер на паузе второй раз не паузится")
+	}
+}
+
+// Регрессия: платформа присылает prefetch того же плеера второй раз перед концом трека. Раньше автомат забывал, что поток
+// открыт, и следующий play висел на STARTING без звука (запись длинного прогона 27.10.2026).
+func TestRepeatedPrefetchKeepsOpenedState(t *testing.T) {
+	r := newRig(t)
+	r.m.Handle(nil, prefetchCmd("p1", "t1"))
+	r.m.Opened("p1", 200_000)
+	r.advance(5 * time.Second)
+	r.m.Handle(nil, prefetchCmd("p1", "t1")) // повтор
+	r.advance(time.Second)
+	r.m.Handle(nil, playCmd("p1", "t1", 0))
+	r.advance(100 * time.Millisecond)
+	want := []string{"STARTING/p1", "PLAYING/p1"}
+	st := r.states()
+	if len(st) != 2 || st[0] != want[0] || st[1] != want[1] {
+		t.Fatalf("после повторного prefetch play должен давать быстрый старт: %v, ждали %v", st, want)
+	}
+	if n := countCalls(r.be, "open p1 t1"); n != 1 {
+		t.Fatalf("поток открывался %d раз, ждали один", n)
+	}
+}
+
+func TestStuckStartFallsBackToMediad(t *testing.T) {
+	r := newRig(t)
+	play := playCmd("p1", "t1", 0)
+	r.m.Handle("ctx", play)
+	r.advance(14 * time.Second)
+	if len(r.fwd) != 0 {
+		t.Fatal("до таймаута команду отдавать рано")
+	}
+	r.advance(2 * time.Second) // Opened так и не пришёл
+	if len(r.fwd) != 1 || string(r.fwd[0]) != string(play) {
+		t.Fatalf("после таймаута play должен вернуться mediad, возвращено %d команд", len(r.fwd))
+	}
+	if r.m.Handle(nil, pauseCmd("p1", "t1")) {
+		t.Fatal("плеер, отданный mediad, больше не перехватывается")
+	}
+}
+
+func TestNoTimeoutAfterPlaybackStarted(t *testing.T) {
+	r := newRig(t)
+	r.m.Handle("ctx", playCmd("p1", "t1", 0))
+	r.m.Opened("p1", 200_000)
+	r.advance(40 * time.Second)
+	if len(r.fwd) != 0 {
+		t.Fatal("играющий плеер откатываться не должен")
+	}
+}
+
+func countCalls(b *fakeBackend, call string) (n int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, c := range b.calls {
+		if c == call {
+			n++
+		}
+	}
+	return
+}

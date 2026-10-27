@@ -373,3 +373,10 @@ func (p *Proxy) ForwardTo(c *Conn, msg []byte) error {
 	_, err := c.up.Write(frame)
 	return err
 }
+
+// NumConns — сколько клиентских соединений сейчас проксируется.
+func (p *Proxy) NumConns() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.conns)
+}

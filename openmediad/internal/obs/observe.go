@@ -28,6 +28,8 @@ type Observer struct {
 	Stats   time.Duration // период сводки по типам кадров; 0 — без сводки
 	Mono    func() int64  // если задано, к времени строки добавляется монотонная метка CLOCK_MONOTONIC
 	Bind    net.IP        // если задано, исходящие соединения идут с этого локального адреса (для проверки правил NAT)
+	// OnLine, если задан, получает строки вместо записи в Out: who — имя сервиса, text — описание без времени.
+	OnLine func(who, text string)
 
 	mu     sync.Mutex
 	counts map[string]int
@@ -137,6 +139,10 @@ func (o *Observer) statsLoop(ctx context.Context) {
 }
 
 func (o *Observer) logf(who, format string, a ...any) {
+	if o.OnLine != nil {
+		o.OnLine(who, fmt.Sprintf(format, a...))
+		return
+	}
 	ts := time.Now().UTC().Format("15:04:05.000")
 	if o.Mono != nil {
 		ts += fmt.Sprintf(" m%.4f", float64(o.Mono())/1e9)

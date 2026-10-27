@@ -34,6 +34,11 @@ var (
 // Новый поток определяется по флагу BOS у страницы с OpusHead; тогда декодер сбрасывается (RFC 7845) и счётчики
 // подрезки по гранулe начинаются заново.
 type Stream struct {
+	// PreSkipTap (необязательный) получает отсчёты, выброшенные как pre-skip (PCM S16LE моно, с учётом OutputGain), до того как
+	// остальное уйдёт в sink. Штатный путь mediad отдаёт спектру и их тоже (сверка со спектром голоса: без них кадры сдвинуты
+	// на pre-skip отсчётов), хотя в динамик первые ≈6,5 мс не идут.
+	PreSkipTap func(pcm []byte)
+
 	dem     ogg.Demuxer
 	dec     *opus.Decoder
 	state   int     // 0 — ждём OpusHead, 1 — ждём OpusTags, 2 — аудио
@@ -109,6 +114,9 @@ func (s *Stream) packet(p ogg.Packet, sink func([]byte) error) error {
 	samples := s.pcm[:n]
 	if s.skip > 0 {
 		k := min(s.skip, len(samples))
+		if s.PreSkipTap != nil {
+			s.PreSkipTap(s.encode(samples[:k]))
+		}
 		samples, s.skip = samples[k:], s.skip-k
 	}
 	// Гранула последней страницы потока задаёт точную длину: всё, что за ней, — добивка кадра.
@@ -124,6 +132,13 @@ func (s *Stream) packet(p ogg.Packet, sink func([]byte) error) error {
 	if len(samples) == 0 {
 		return nil
 	}
+	s.emitted += int64(len(samples))
+	s.total += int64(len(samples))
+	return sink(s.encode(samples))
+}
+
+// encode переводит отсчёты в байты S16LE с учётом OutputGain; результат лежит в общем буфере s.out.
+func (s *Stream) encode(samples []int16) []byte {
 	s.out = s.out[:0]
 	for _, v := range samples {
 		if s.gain != 1 {
@@ -131,9 +146,7 @@ func (s *Stream) packet(p ogg.Packet, sink func([]byte) error) error {
 		}
 		s.out = binary.LittleEndian.AppendUint16(s.out, uint16(v))
 	}
-	s.emitted += int64(len(samples))
-	s.total += int64(len(samples))
-	return sink(s.out)
+	return s.out
 }
 
 func (s *Stream) head(b []byte) error {

@@ -131,6 +131,7 @@ type PlayerKind uint64
 const (
 	PlayerAudio PlayerKind = 1 // музыка/потоки
 	PlayerVoice PlayerKind = 2 // голос Алисы (TTS)
+	PlayerFile  PlayerKind = 4 // воспроизведение локального файла: звонок таймера и будильника, системные звуки
 )
 
 func (k PlayerKind) String() string {
@@ -139,6 +140,8 @@ func (k PlayerKind) String() string {
 		return "audio"
 	case PlayerVoice:
 		return "voice"
+	case PlayerFile:
+		return "file"
 	}
 	return "player?"
 }
@@ -239,11 +242,12 @@ const (
 	CmdFocus
 	CmdEqualizer
 	CmdCrossfade
+	CmdFileStart // старт плеера файлов: поле 1.25 — путь к файлу
 )
 
 func (c CommandKind) String() string {
 	return [...]string{"other", "voice-start", "voice-chunk", "voice-eos", "release", "play",
-		"prefetch", "pause", "focus", "equalizer", "crossfade"}[c]
+		"prefetch", "pause", "focus", "equalizer", "crossfade", "file-start"}[c]
 }
 
 type AudioCommand []byte
@@ -316,10 +320,25 @@ func (c AudioCommand) Classify() CommandKind {
 			return CmdPlay
 		}
 	}
+	if p.Kind == PlayerFile {
+		if _, ok := c.FilePath(); ok {
+			return CmdFileStart
+		}
+	}
 	if pb.Has(c, 39) {
 		return CmdFocus
 	}
 	return CmdOther
+}
+
+// FilePath — путь к файлу из стартовой команды плеера файлов (поле 1.25).
+func (c AudioCommand) FilePath() (string, bool) {
+	d, ok := pb.Bytes(c, 1)
+	if !ok {
+		return "", false
+	}
+	p, ok := pb.Str(d, 25)
+	return p, ok && p != ""
 }
 
 // --- Remoting (тип 210, aliced) ---

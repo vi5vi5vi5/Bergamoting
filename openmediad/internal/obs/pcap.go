@@ -283,7 +283,7 @@ func (d *decoder) frame(svc, dir string, frame []byte) {
 	}
 	if line, show := Describe(svc, m, d.o); show {
 		fmt.Fprintf(d.out, "%s %-11s %s %s\n", d.ts.Format("15:04:05.000"), svc, dir, line)
-		if d.o.Dump && (m.Type == wire.TypeAudioCommand || m.Type == wire.TypeAudioEvent) {
+		if d.o.Dump && d.dumpType(m.Type) {
 			max := d.o.DumpMax
 			if max <= 0 {
 				max = 160
@@ -291,4 +291,12 @@ func (d *decoder) frame(svc, dir string, frame []byte) {
 			fmt.Fprintf(d.out, "    %s\n", pb.Dump(m.Body, max))
 		}
 	}
+}
+
+// dumpType — печатать ли сообщение этого типа деревом полей (-dump).
+func (d *decoder) dumpType(t wire.Type) bool {
+	if len(d.o.DumpTypes) > 0 {
+		return d.o.DumpTypes[t]
+	}
+	return t == wire.TypeAudioCommand || t == wire.TypeAudioEvent
 }

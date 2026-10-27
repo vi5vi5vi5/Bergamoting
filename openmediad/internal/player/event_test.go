@@ -102,6 +102,33 @@ func equalFields(a, b []pb.Field) bool {
 	return true
 }
 
+// isSynthetic узнаёт событие, собранное нашим шимом, а не настоящим mediad: в записях со стороны шима такие события видны
+// на клиентской стороне (после REDIRECT они идут «с порта 9906») и перемешаны с настоящими. У наших событий в diag всегда
+// rss_mem = 33000 (константа), у настоящих это измеренное число.
+func isSynthetic(ev []byte) bool {
+	var rss, bitrate uint64
+	r := pb.NewReader(ev)
+	for {
+		f, err := r.Next()
+		if err != nil {
+			break
+		}
+		if f.Num != 14 {
+			continue
+		}
+		name, _ := pb.Str(f.B, 1)
+		v, _ := pb.Uint(f.B, 3)
+		switch name {
+		case "rss_mem":
+			rss = v
+		case "bitrate":
+			bitrate = v
+		}
+	}
+	_ = bitrate
+	return rss == 33000
+}
+
 // firstDiff называет первое расхождение двух сообщений: «поле N» или «поле N.M».
 func firstDiff(a, b []byte, path string) string {
 	ra, rb := pb.NewReader(a), pb.NewReader(b)
@@ -168,22 +195,22 @@ func TestEventsMatchRecordings(t *testing.T) {
 			case wire.TypeAudioEvent:
 				e := quasar.AudioEvent(m.Body)
 				p := e.Player()
-				if p.Kind != quasar.PlayerAudio || e.Kind() == 5 {
+				if p.Kind != quasar.PlayerAudio || e.Kind() == 5 || isSynthetic(m.Body) {
+					return
+				}
+				play, ok := plays[p.ID]
+				if !ok {
+					// События плееров, чьих команд в записи нет (их съел шим, это его собственные события), не сверяются и
+					// не должны влиять на учёт паузы: иначе наш PAUSED при передаче mediad сделал бы холодный запуск «тёплым».
 					return
 				}
 				if e.Kind() == 1 {
 					switch e.State() {
 					case quasar.PlayState(4):
 						paused[p.Stream] = true
-					case quasar.PlayState(3), quasar.PlayState(5):
-						if p.ID != "" && e.State() == quasar.PlayState(3) {
-							delete(paused, p.Stream)
-						}
+					case quasar.PlayState(3):
+						delete(paused, p.Stream)
 					}
-				}
-				play, ok := plays[p.ID]
-				if !ok {
-					return
 				}
 				meta := MetaFrom(play, reused[p.ID])
 				sn := snapFrom(m.Body, meta.Desc)

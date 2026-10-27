@@ -18,6 +18,7 @@ import (
 const (
 	pcmBytesPerMs = 192                  // 48 кГц × 2 канала × 2 байта / 1000
 	ringBytes     = 4000 * pcmBytesPerMs // запас PCM между декодером и выводом: 4 с
+	historyBytes  = 1500 * pcmBytesPerMs // история для возврата звука при паузе: 1,5 с
 	chunkBytes    = 50 * pcmBytesPerMs   // порция вывода: 50 мс
 	openLevel     = 300 * pcmBytesPerMs  // «поток открыт», когда готовы 300 мс звука
 	skipLimit     = 256 << 10            // дальше этого от текущей позиции поток открывается заново (Range)
@@ -55,8 +56,16 @@ type Engine struct {
 	NewDec  DecoderFactory
 	NewSink func() (PCMSink, error)
 	Logf    func(string, ...any)
+	// NoRewind отключает возврат звука, пропавшего в буферах aplay при паузе (для тестов с мгновенным приёмником).
+	NoRewind bool
+	// Now — часы для оценки того, что уже прозвучало (по умолчанию time.Now); подменяется в тестах.
+	Now func() time.Time
 	// NoFadeIn отключает нарастание громкости в начале вывода (для тестов, которые читают отсчёты как метки).
 	NoFadeIn bool
+
+	// OnSpectrum (необязательный) получает кадры спектра и смены состояния потока для визуализации.
+	// Вызывается из цикла вывода: обработчик должен быстро возвращаться.
+	OnSpectrum func(SpectrumEvent)
 
 	OnOpened   func(id string, durMs uint64)
 	OnFailed   func(id string, err error)
@@ -114,8 +123,13 @@ type track struct {
 	playing bool
 	opened  bool
 	closed  bool
-	ctx     context.Context
-	cancel  context.CancelFunc
+	spec    uint64 // идентификатор потока спектра (0 — ещё не начат)
+	// учёт текущего цикла вывода (для позиции и возврата звука при паузе)
+	outAt     atomic.Int64  // unix-наносекунды первой записи цикла в aplay (0 — не играет)
+	outPlayed atomic.Uint64 // played в начале цикла
+	loopDone  chan struct{} // закрывается, когда последний запущенный цикл вывода завершился
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
 // Warm готовит клиента HTTP заранее: чтение хранилища корневых сертификатов занимает десятки миллисекунд, и первое
@@ -138,7 +152,18 @@ func (e *Engine) Open(id string, t player.Track, offsetMs uint64) {
 	e.mu.Lock()
 	e.init()
 	if old := e.tracks[id]; old != nil {
+		// Повторное открытие уже открытого трека (повторный prefetch): сообщаем об открытии ещё раз, иначе тот, кто
+		// ждёт события, не узнает, что поток давно готов.
+		old.mu.Lock()
+		opened, dur := old.opened, uint64(0)
+		if old.idx != nil {
+			dur = old.idx.DurationMs
+		}
+		old.mu.Unlock()
 		e.mu.Unlock()
+		if opened && e.OnOpened != nil {
+			go e.OnOpened(id, dur)
+		}
 		return
 	}
 	tr := &track{e: e, id: id, src: t}
@@ -221,7 +246,7 @@ func (t *track) start(hdr *Stream, posMs uint64) {
 		return
 	}
 	ctx, cancel := context.WithCancel(t.ctx)
-	s := &session{cancel: cancel, ring: newRing(ringBytes), dec: dec}
+	s := &session{cancel: cancel, ring: newRing(ringBytes, historyBytes), dec: dec}
 	t.sess = s
 	t.baseMs = idx.StartMs(min(i0, idx.N()-1))
 	t.played.Store(0)

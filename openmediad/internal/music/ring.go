@@ -17,14 +17,18 @@ type ring struct {
 	mu      sync.Mutex
 	cond    *sync.Cond
 	buf     []byte
+	limit   int // сколько непрочитанных байт держим; остальное место отдано истории для Rewind
+	hist    int // сколько уже прочитанных байт ещё не затёрто новыми
 	r, n    int
 	closed  bool // писатель закончил: после опустошения чтение вернёт io.EOF
 	stopped bool // буфер брошен: писатель и читатель получают errStopped
 	wake    bool
 }
 
-func newRing(size int) *ring {
-	r := &ring{buf: make([]byte, size)}
+// newRing создаёт буфер на size непрочитанных байт плюс history байт истории: прочитанное остаётся в буфере, пока его не
+// затрёт запись, и Rewind может вернуть до history байт назад (так возвращается звук, пропавший в буферах aplay при паузе).
+func newRing(size, history int) *ring {
+	r := &ring{buf: make([]byte, size+history), limit: size}
 	r.cond = sync.NewCond(&r.mu)
 	return r
 }
@@ -35,16 +39,17 @@ func (r *ring) Write(p []byte) (int, error) {
 	defer r.mu.Unlock()
 	total := 0
 	for len(p) > 0 {
-		for r.n == len(r.buf) && !r.stopped {
+		for r.n >= r.limit && !r.stopped {
 			r.cond.Wait()
 		}
 		if r.stopped {
 			return total, errStopped
 		}
 		w := (r.r + r.n) % len(r.buf)
-		k := min(len(p), len(r.buf)-r.n, len(r.buf)-w)
+		k := min(len(p), r.limit-r.n, len(r.buf)-w)
 		copy(r.buf[w:], p[:k])
 		r.n += k
+		r.hist = min(r.hist, len(r.buf)-r.n) // запись затирает самое старое из прочитанного
 		p = p[k:]
 		total += k
 		r.cond.Broadcast()
@@ -74,8 +79,24 @@ func (r *ring) ReadWait(p []byte) (int, error) {
 	copy(p, r.buf[r.r:r.r+k])
 	r.r = (r.r + k) % len(r.buf)
 	r.n -= k
+	r.hist = min(r.hist+k, len(r.buf)-r.n)
 	r.cond.Broadcast()
 	return k, nil
+}
+
+// Rewind возвращает чтение назад на k байт (но не дальше сохранившейся истории) и сообщает, на сколько вернул.
+func (r *ring) Rewind(k int) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	k = min(k, r.hist)
+	if k <= 0 {
+		return 0
+	}
+	r.r = (r.r - k + len(r.buf)) % len(r.buf)
+	r.n += k
+	r.hist -= k
+	r.cond.Broadcast()
+	return k
 }
 
 // WaitLevel ждёт, пока в буфере будет не меньше want байт или писатель закончит. false — буфер брошен.

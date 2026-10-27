@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"math"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"openmediad/internal/player"
+	"openmediad/internal/spectrum"
 )
 
 const fakeFrameBytes = 4096 // PCM на один кадр AAC у поддельного декодера
@@ -122,6 +125,7 @@ func newHarness(t *testing.T, n int, status int) *harness {
 			return s, nil
 		},
 		NoFadeIn:   true,
+		NoRewind:   true, // мгновенный приёмник ничего не «теряет» в буферах: оценка потерь по часам здесь не применима
 		Logf:       func(f string, a ...any) { t.Logf(f, a...) },
 		OnOpened:   func(id string, d uint64) { h.opened <- d },
 		OnFailed:   func(id string, err error) { h.failed <- err },
@@ -371,4 +375,196 @@ func TestFadeInRampsFromSilence(t *testing.T) {
 	if !bytes.Equal(c, b[:fadeInBytes]) {
 		t.Fatal("нарастание по порциям отличается от нарастания целиком")
 	}
+}
+
+// specLog собирает события спектра движка.
+type specLog struct {
+	mu sync.Mutex
+	ev []SpectrumEvent
+}
+
+func (s *specLog) add(e SpectrumEvent) {
+	e.DB = append([]float32(nil), e.DB...)
+	s.mu.Lock()
+	s.ev = append(s.ev, e)
+	s.mu.Unlock()
+}
+
+func (s *specLog) all() []SpectrumEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]SpectrumEvent(nil), s.ev...)
+}
+
+func TestSpectrumFollowsPlayback(t *testing.T) {
+	h := newHarness(t, 60, 0)
+	var sl specLog
+	h.e.OnSpectrum = sl.add
+	h.e.Open("p1", h.track("p1"), 0)
+	waitFor(t, h.opened, "Opened")
+	h.e.Start("p1")
+	waitFor(t, h.done, "Finished")
+	ev := sl.all()
+	if len(ev) < 3 || ev[0].Kind != spectrum.KindStart {
+		t.Fatalf("первым должно идти сообщение о старте потока, а пришло %+v", ev[:min(2, len(ev))])
+	}
+	if ev[len(ev)-1].Kind != spectrum.KindStop {
+		t.Fatalf("последним — остановка потока, а пришло %d", ev[len(ev)-1].Kind)
+	}
+	data := 0
+	for _, e := range ev {
+		if e.Stream != ev[0].Stream {
+			t.Fatal("у одного трека один идентификатор потока")
+		}
+		if e.Kind == spectrum.KindData {
+			data++
+			if len(e.DB) != spectrum.Bands {
+				t.Fatalf("кадр из %d значений вместо %d", len(e.DB), spectrum.Bands)
+			}
+		}
+	}
+	// 60 кадров AAC по 4096 Б PCM = 245760 Б = 61440 отсчётов = 32 интервала по 1920 отсчётов
+	if want := 60 * fakeFrameBytes / 4 / spectrum.FrameLen; data != want {
+		t.Fatalf("кадров спектра %d, ждали %d", data, want)
+	}
+}
+
+func TestSpectrumPauseStopsAndResumeContinuesStream(t *testing.T) {
+	h := newHarness(t, 150, 0)
+	h.paced = 8 * time.Millisecond
+	var sl specLog
+	h.e.OnSpectrum = sl.add
+	h.e.Open("p1", h.track("p1"), 0)
+	waitFor(t, h.opened, "Opened")
+	h.e.Start("p1")
+	time.Sleep(80 * time.Millisecond)
+	h.e.Pause("p1")
+	time.Sleep(100 * time.Millisecond)
+	h.e.Start("p1")
+	time.Sleep(80 * time.Millisecond)
+	h.e.Close("p1")
+	time.Sleep(100 * time.Millisecond)
+	var kinds []int
+	var stream uint64
+	for _, e := range sl.all() {
+		if e.Kind == spectrum.KindData {
+			continue
+		}
+		kinds = append(kinds, e.Kind)
+		if stream == 0 {
+			stream = e.Stream
+		}
+		if e.Stream != stream {
+			t.Fatal("возобновление должно продолжать тот же поток")
+		}
+	}
+	want := []int{spectrum.KindStart, spectrum.KindStop, spectrum.KindResume, spectrum.KindStop}
+	if len(kinds) != len(want) {
+		t.Fatalf("служебные сообщения %v, ждали %v", kinds, want)
+	}
+	for i := range want {
+		if kinds[i] != want[i] {
+			t.Fatalf("служебные сообщения %v, ждали %v", kinds, want)
+		}
+	}
+}
+
+func TestDecoderStartFailureReported(t *testing.T) {
+	h := newHarness(t, 20, 0)
+	h.e.NewDec = func() (Decoder, error) { return nil, io.ErrUnexpectedEOF }
+	h.e.Open("p1", h.track("p1"), 0)
+	if err := waitFor(t, h.failed, "OnFailed"); err == nil {
+		t.Fatal("ошибка запуска декодера должна сообщаться (откат на mediad)")
+	}
+}
+
+func TestReopenOfOpenedTrackRenotifies(t *testing.T) {
+	h := newHarness(t, 30, 0)
+	h.e.Open("p1", h.track("p1"), 0)
+	d1 := waitFor(t, h.opened, "первое Opened")
+	h.e.Open("p1", h.track("p1"), 0) // повторный prefetch
+	d2 := waitFor(t, h.opened, "повторное Opened")
+	if d1 != d2 {
+		t.Fatalf("длительность в повторном уведомлении %d, в первом %d", d2, d1)
+	}
+	h.mu.Lock()
+	n := len(h.decs)
+	h.mu.Unlock()
+	if n != 1 {
+		t.Fatalf("повторное открытие не должно запускать второй декодер, запущено %d", n)
+	}
+}
+
+// applyGain в целых числах не должна расходиться с расчётом в плавающей точке больше чем на единицу младшего разряда.
+func TestApplyGainMatchesFloatReference(t *testing.T) {
+	r := rand.New(rand.NewSource(7))
+	for _, c := range []struct{ cur, target float64 }{{0.4, 0.4}, {1, 0.25}, {0.25, 1}, {0.7, 0.72}, {1, 2}, {0.43, 0.43}} {
+		b := make([]byte, 2*5000)
+		ref := make([]float64, 5000)
+		for i := range ref {
+			v := int16(r.Intn(65536) - 32768)
+			binary.LittleEndian.PutUint16(b[2*i:], uint16(v))
+			ref[i] = float64(v)
+		}
+		next := applyGain(b, c.cur, c.target)
+		step := next
+		if d := c.target - c.cur; math.Abs(d) > ductRampPerCh {
+			step = c.cur + math.Copysign(ductRampPerCh, d)
+		}
+		if next != step {
+			t.Fatalf("громкость к концу порции %v, ждали %v", next, step)
+		}
+		for i := range ref {
+			g := c.cur + (next-c.cur)*float64(i)/float64(len(ref))
+			want := math.Max(-32768, math.Min(32767, math.Round(ref[i]*g)))
+			got := float64(int16(binary.LittleEndian.Uint16(b[2*i:])))
+			if math.Abs(got-want) > 1 {
+				t.Fatalf("громкость %v→%v, отсчёт %d: %v, ждали %v", c.cur, c.target, i, got, want)
+			}
+		}
+	}
+}
+
+// Пауза выбрасывает то, что лежало в трубе и буферах aplay; шим возвращает это в буфер, и после «продолжи» звук идёт с места,
+// где реально замолчал динамик. Часы подменены: «прошло» 400 мс при «записано» около 240 КБ (1,2 с звука).
+func TestPauseRewindsAudioThatNeverReachedSpeaker(t *testing.T) {
+	h := newHarness(t, 150, 0)
+	h.paced = 8 * time.Millisecond // вывод в 6 раз быстрее реального времени: записано больше, чем прозвучало бы
+	h.e.NoRewind = false
+	var clk atomic.Int64 // прошедшее время цикла вывода, нс
+	base := time.Now()
+	h.e.Now = func() time.Time { return base.Add(time.Duration(clk.Load())) }
+	h.e.Open("p1", h.track("p1"), 0)
+	waitFor(t, h.opened, "Opened")
+	h.e.Start("p1")
+	time.Sleep(200 * time.Millisecond)
+	clk.Store(int64(400 * time.Millisecond)) // прозвучало 400 − 40 (задержка) = 360 мс = 69120 байт
+	h.e.Pause("p1")
+	time.Sleep(150 * time.Millisecond)
+	written := len(h.sinks[0].bytes())
+	const audible = 360 * pcmBytesPerMs
+	if written < audible+9600 {
+		t.Fatalf("приёмник принял лишь %d байт: для проверки нужно заметно больше %d", written, audible)
+	}
+	if p := h.e.Pos("p1"); p < 355 || p > 365 {
+		t.Fatalf("позиция после паузы %d мс, ждали ≈360 (то, что прозвучало), а не %d (то, что записано)", p, written/pcmBytesPerMs)
+	}
+	h.e.Start("p1")
+	waitFor(t, h.done, "Finished")
+	second := h.sinks[1].bytes()
+	if len(second) < 4096 {
+		t.Fatalf("после «продолжи» второй приёмник получил лишь %d байт", len(second))
+	}
+	if !bytes.Equal(second[:4096], expectedStream(150)[audible:audible+4096]) {
+		t.Fatalf("звук после паузы должен продолжаться с байта %d (то, что прозвучало), а продолжился с другого места", audible)
+	}
+}
+
+// expectedStream — весь PCM трека у поддельного декодера: кадр i даёт fakeFrameBytes байт, первые два — номер кадра.
+func expectedStream(frames int) []byte {
+	out := make([]byte, frames*fakeFrameBytes)
+	for i := 0; i < frames; i++ {
+		binary.LittleEndian.PutUint16(out[i*fakeFrameBytes:], uint16(i))
+	}
+	return out
 }

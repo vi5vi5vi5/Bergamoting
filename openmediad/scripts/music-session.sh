@@ -31,7 +31,8 @@ SECS=$((total + TAIL))
 master() { $SSH "amixer sget Master 2>/dev/null | grep -o '\[[0-9]*%\]' | head -1" < /dev/null 2>/dev/null || true; }
 echo "Master до: $(master)   длительность записи: ${SECS} с"
 
-$SSH "/opt/bin/tcpdump -i lo -s 0 -U -w - 'tcp and not port 8765' 2>/dev/null & P=\$!; sleep $SECS; kill \$P" \
+FILTER=${FILTER:-tcp and not port 8765}   # фильтр tcpdump; для долгих сценариев сузьте, например 'tcp and (port 9906 or port 19906)'
+$SSH "/opt/bin/tcpdump -i lo -s 0 -U -w - '$FILTER' 2>/dev/null & P=\$!; sleep $SECS; kill \$P" \
 	< /dev/null > "captures/$NAME.pcap" 2>/dev/null &
 B=$!
 sleep 2

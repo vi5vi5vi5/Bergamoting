@@ -1,6 +1,7 @@
 package player
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -19,6 +20,9 @@ const (
 	// pauseCache — сколько плеер на паузе остаётся готовым к возобновлению. У mediad PCM закрывается примерно через
 	// 30 минут простоя; больше одного плеера на паузе он не держит.
 	pauseCache = 30 * time.Minute
+
+	// openTimeout — сколько ждём, пока запущенный плеер заиграет (поток открыт, звук пошёл), прежде чем вернуть play настоящему mediad.
+	openTimeout = 15 * time.Second
 )
 
 // DuckGain — громкость музыки, пока у диалога аудиофокус (команда focus 39:1). Значение — приближение: в
@@ -120,12 +124,38 @@ type Machine struct {
 	After func(d time.Duration, f func()) (cancel func())
 	Back  Backend
 	Logf  func(string, ...any)
+	// Note (необязательный) получает короткие сведения о решениях автомата для отладочного журнала. Вызывается под
+	// блокировкой машины: обработчик не должен обращаться к машине. Виды: prefetch, play-warm, play-cold, play-resume,
+	// pause, retire, evict, expire, release, focus, seek, finished, failed.
+	Note func(kind, id, detail string)
 
-	mu      sync.Mutex
-	players map[string]*inst
-	byTrack map[string]string // трек → id его плеера на паузе (кэш mediad)
-	foreign map[string]bool   // плееры, которые ведёт настоящий mediad (откат): их команды не перехватываются
-	ducked  bool
+	// NoMusic отключает перехват музыкального плеера (остаётся только голос и слежение за фокусом).
+	NoMusic bool
+
+	// Voice (необязательный) включает перехват голоса Алисы: voice-start, voice-chunk, voice-eos и release голосового плеера.
+	// nil — голос идёт настоящему mediad.
+	Voice VoiceBackend
+
+	// File (необязательный) включает перехват плеера файлов (вид 4): звонок таймера и будильника, системные звуки.
+	// nil — они идут настоящему mediad. FileOK решает, какие файлы брать себе (nil — DefaultFileOK).
+	File   FileBackend
+	FileOK func(path string) bool
+
+	mu       sync.Mutex
+	voices   map[string]*vinst
+	vforeign map[string]bool // ответы, отданные настоящему mediad (откат): остальные команды ответа тоже идут ему
+	files    map[string]*finst
+	fforeign map[string]bool // звонки, отданные настоящему mediad: release тоже идёт ему
+	players  map[string]*inst
+	byTrack  map[string]string // трек → id его плеера на паузе (кэш mediad)
+	foreign  map[string]bool   // плееры, которые ведёт настоящий mediad (откат): их команды не перехватываются
+	ducked   bool
+}
+
+func (m *Machine) note(kind, id, detail string) {
+	if m.Note != nil {
+		m.Note(kind, id, detail)
+	}
 }
 
 func (m *Machine) logf(f string, a ...any) {
@@ -139,6 +169,10 @@ func (m *Machine) init() {
 		m.players = map[string]*inst{}
 		m.byTrack = map[string]string{}
 		m.foreign = map[string]bool{}
+		m.voices = map[string]*vinst{}
+		m.vforeign = map[string]bool{}
+		m.files = map[string]*finst{}
+		m.fforeign = map[string]bool{}
 	}
 }
 
@@ -151,8 +185,18 @@ func (m *Machine) Handle(ctx any, c quasar.AudioCommand) bool {
 		on, _ := pb.Uint(c, 39)
 		m.Focus(on == 1)
 		return false
+	case quasar.CmdVoiceStart, quasar.CmdVoiceChunk, quasar.CmdVoiceEOS:
+		if m.Voice == nil || p.Kind != quasar.PlayerVoice {
+			return false
+		}
+		return m.voiceCommand(ctx, k, c)
+	case quasar.CmdFileStart:
+		if m.File == nil {
+			return false
+		}
+		return m.fileStart(ctx, c)
 	case quasar.CmdPlay, quasar.CmdPrefetch:
-		if p.Kind != quasar.PlayerAudio || m.isForeign(p.ID) {
+		if m.NoMusic || p.Kind != quasar.PlayerAudio || m.isForeign(p.ID) {
 			return false
 		}
 		if k == quasar.CmdPrefetch {
@@ -162,7 +206,13 @@ func (m *Machine) Handle(ctx any, c quasar.AudioCommand) bool {
 		}
 		return true
 	case quasar.CmdPause, quasar.CmdRelease, quasar.CmdCrossfade:
-		if p.Kind != quasar.PlayerAudio || !m.owns(p.ID) {
+		if k == quasar.CmdRelease && p.Kind == quasar.PlayerVoice && m.Voice != nil {
+			return m.voiceRelease(p.ID)
+		}
+		if k == quasar.CmdRelease && p.Kind == quasar.PlayerFile && m.File != nil {
+			return m.fileRelease(p.ID)
+		}
+		if m.NoMusic || p.Kind != quasar.PlayerAudio || !m.owns(p.ID) {
 			return false
 		}
 		switch k {
@@ -175,7 +225,7 @@ func (m *Machine) Handle(ctx any, c quasar.AudioCommand) bool {
 		}
 		return true
 	case quasar.CmdOther:
-		if c.Reason() == "AUDIO_REWIND directive" && m.owns(p.ID) {
+		if !m.NoMusic && c.Reason() == "AUDIO_REWIND directive" && m.owns(p.ID) {
 			if rw, ok := pb.Bytes(c, 13); ok {
 				if f, ok := pb.Find(rw, 2); ok && f.Wire == pb.WireFixed64 {
 					m.Seek(p.ID, int64(float64frombits(f.U)*1000))
@@ -233,9 +283,19 @@ func (m *Machine) Prefetch(ctx any, c quasar.AudioCommand) {
 	m.init()
 	meta := MetaFrom(c, true)
 	id := meta.Player.ID
+	if old := m.players[id]; old != nil {
+		// Платформа присылает prefetch того же плеера второй раз незадолго до конца текущего трека (замечено на записи длинного
+		// прогона). Это не новый плеер: поток уже открыт, и забывать об этом нельзя, иначе play будет ждать открытия вечно.
+		old.raw, old.ctx = append([]byte(nil), c...), ctx
+		old.meta.Desc = meta.Desc
+		m.note("prefetch", id, "повторная команда, состояние плеера сохранено")
+		m.mu.Unlock()
+		return
+	}
 	in := &inst{meta: meta, raw: append([]byte(nil), c...), ctx: ctx, st: stNew, vsid: newVsid(m.Now()), mark: randString(6)}
 	m.players[id] = in
 	off, _ := pb.Uint(meta.Desc, 3)
+	m.note("prefetch", id, TrackOf(meta.Desc).Title)
 	m.mu.Unlock()
 	m.Back.Open(id, TrackOf(meta.Desc), off)
 }
@@ -290,6 +350,14 @@ func (m *Machine) Play(ctx any, c quasar.AudioCommand) bool {
 	in.st = stStarting
 	in.startMs = uint64(m.Now().UnixMilli()) + uint64(startingDelay/time.Millisecond)
 	evict := m.evictPaused(in.meta.Player.Stream, id) // пользователь ушёл на другой трек: кэш паузы больше не нужен
+	switch {
+	case adopt != "":
+		m.note("play-resume", id, fmt.Sprintf("с %d мс, источник плеера %s", in.offset, adopt[:min(8, len(adopt))]))
+	case in.opened:
+		m.note("play-warm", id, TrackOf(in.meta.Desc).Title)
+	default:
+		m.note("play-cold", id, TrackOf(in.meta.Desc).Title)
+	}
 	m.mu.Unlock()
 	for _, eid := range evict {
 		m.Back.Close(eid)
@@ -308,7 +376,19 @@ func (m *Machine) Play(ctx any, c quasar.AudioCommand) bool {
 		m.Emit(e)
 	}
 	m.after(in, startingDelay, func() { m.starting(id) })
+	m.after(in, openTimeout, func() { m.openTimeoutFired(id) })
 	return true
+}
+
+// openTimeoutFired возвращает команду настоящему mediad, если плеер за openTimeout так и не заиграл: тишина хуже отката.
+func (m *Machine) openTimeoutFired(id string) {
+	m.mu.Lock()
+	in := m.players[id]
+	stuck := in != nil && in.st == stStarting
+	m.mu.Unlock()
+	if stuck {
+		m.Failed(id, fmt.Errorf("плеер не заиграл за %s", openTimeout))
+	}
 }
 
 func (m *Machine) hasSource(id string) bool {
@@ -333,6 +413,7 @@ func (m *Machine) retire(o *inst, sameTrack bool) (out [][]byte) {
 	m.stopTimers(o)
 	pos := m.Back.Pos(id)
 	now := uint64(m.Now().UnixMilli())
+	m.note("retire", id, fmt.Sprintf("вытеснен новым play на %d мс (тот же трек: %v)", pos, sameTrack))
 	if o.st == stPausing && sameTrack {
 		o.stopMs = now
 		out = append(out, m.event(o, 1, 4, pos))
@@ -408,6 +489,7 @@ func (m *Machine) Failed(id string, err error) {
 		return
 	}
 	m.logf("плеер %s: поток не открылся: %v", id, err)
+	m.note("failed", id, err.Error())
 	in.failed = true
 	if in.st != stStarting && in.st != stPlaying {
 		m.mu.Unlock()
@@ -481,6 +563,7 @@ func (m *Machine) Pause(id string) {
 	}
 	m.stopTimers(in)
 	in.st = stPausing
+	m.note("pause", id, "")
 	m.mu.Unlock()
 	m.Back.Pause(id)
 	m.after(in, pausedDelay, func() { m.paused(id) })
@@ -518,6 +601,7 @@ func (m *Machine) evictPaused(keepTrack, except string) (ids []string) {
 			delete(m.byTrack, o.meta.Player.Stream)
 		}
 		delete(m.players, pid)
+		m.note("evict", pid, "кэш паузы заменён другим плеером")
 		ids = append(ids, pid)
 	}
 	return ids
@@ -535,6 +619,7 @@ func (m *Machine) expire(id string) {
 		delete(m.byTrack, in.meta.Player.Stream)
 	}
 	delete(m.players, id)
+	m.note("expire", id, "30 минут на паузе")
 	m.mu.Unlock()
 	m.Back.Close(id)
 }
@@ -552,6 +637,7 @@ func (m *Machine) Release(id string) {
 		delete(m.byTrack, in.meta.Player.Stream)
 	}
 	delete(m.players, id)
+	m.note("release", id, "")
 	m.mu.Unlock()
 	m.Back.Close(id)
 }
@@ -587,6 +673,7 @@ func (m *Machine) Seek(id string, deltaMs int64) {
 	}
 	in.seenProg = false
 	ev := m.event(in, 2, 3, uint64(pos))
+	m.note("seek", id, fmt.Sprintf("%+d мс → %d мс", deltaMs, pos))
 	m.mu.Unlock()
 	m.Back.Seek(id, uint64(pos))
 	m.Emit(ev)
@@ -602,6 +689,7 @@ func (m *Machine) Focus(on bool) {
 		return
 	}
 	m.ducked = on
+	m.note("focus", "", fmt.Sprint(on))
 	var playing []*inst
 	for _, in := range m.players {
 		if in.st == stPlaying {
@@ -633,6 +721,7 @@ func (m *Machine) Finished(id string) {
 	in.stopMs = uint64(m.Now().UnixMilli())
 	ev := m.event(in, 1, 5, in.durMs)
 	delete(m.players, id)
+	m.note("finished", id, "трек доигран до конца")
 	m.mu.Unlock()
 	m.Emit(ev)
 	m.Back.Close(id)
@@ -701,5 +790,87 @@ func descURLFields(desc []byte, prev []pb.Field) []pb.Field {
 	if len(u42) > 0 {
 		out = setOver(out, u42...)
 	}
+	return out
+}
+
+// Handoff — мягкая передача плееров настоящему mediad при остановке шима: каждый играющий плеер получает PAUSED с текущей
+// позицией, поэтому платформа считает музыку стоящей на паузе, и «продолжи» запустит трек у настоящего mediad с того же места.
+// Без этого платформа продолжила бы считать, что музыка играет, хотя звука уже нет. Вызывать до закрытия соединений шима.
+func (m *Machine) Handoff() {
+	m.mu.Lock()
+	var evs [][]byte
+	var ids []string
+	for id, in := range m.players {
+		if in.st != stPlaying && in.st != stStarting && in.st != stPausing {
+			continue
+		}
+		m.stopTimers(in)
+		in.st = stPaused
+		in.stopMs = uint64(m.Now().UnixMilli())
+		evs = append(evs, m.event(in, 1, 4, m.Back.Pos(id)))
+		ids = append(ids, id)
+		m.note("handoff", id, "шим останавливается: плеер передан mediad на паузе")
+	}
+	var vids []string
+	for id, v := range m.voices {
+		if v.st == vEnded {
+			continue
+		}
+		m.vstop(v)
+		v.st = vEnded
+		v.stopMs = uint64(m.Now().UnixMilli())
+		evs = append(evs, m.voiceEvent(v, 1, 5, v.lastProg))
+		vids = append(vids, id)
+		m.note("handoff", id, "шим останавливается: ответ Алисы прерван")
+	}
+	fhs := m.handoffFiles()
+	m.mu.Unlock()
+	for _, id := range ids {
+		m.Back.Pause(id)
+	}
+	for _, id := range vids {
+		m.Voice.Abort(id)
+	}
+	m.handoffFilesDone(fhs)
+	for _, e := range evs {
+		m.Emit(e)
+	}
+}
+
+// PlayerInfo — снимок плеера для отладочной страницы.
+type PlayerInfo struct {
+	ID     string `json:"id"`
+	State  string `json:"state"`
+	Track  string `json:"track,omitempty"`
+	Title  string `json:"title,omitempty"`
+	PosMs  uint64 `json:"pos_ms"`
+	DurMs  uint64 `json:"dur_ms,omitempty"`
+	Opened bool   `json:"opened"`
+	Ducked bool   `json:"ducked"`
+}
+
+var stateNames = [...]string{"открыт заранее (prefetch)", "запускается", "играет", "останавливается", "на паузе", "закончен"}
+
+// Snapshot возвращает плееры, которые сейчас ведёт машина.
+func (m *Machine) Snapshot() []PlayerInfo {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]PlayerInfo, 0, len(m.players))
+	for id, in := range m.players {
+		t := TrackOf(in.meta.Desc)
+		out = append(out, PlayerInfo{ID: id[:min(8, len(id))], State: stateNames[in.st], Track: t.ID, Title: t.Title,
+			PosMs: m.Back.Pos(id), DurMs: in.durMs, Opened: in.opened, Ducked: m.ducked})
+	}
+	for id, v := range m.voices {
+		name := "голос: запускается"
+		switch v.st {
+		case vPlaying:
+			name = "голос: говорит"
+		case vEnded:
+			name = "голос: закончил"
+		}
+		out = append(out, PlayerInfo{ID: id[:min(8, len(id))], State: name, Title: "ответ Алисы", PosMs: m.Voice.Pos(id)})
+	}
+	out = append(out, m.fileInfos()...)
 	return out
 }
