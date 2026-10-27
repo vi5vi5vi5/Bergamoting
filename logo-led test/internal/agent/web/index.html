@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Подсветка Мини 3</title>
+<style>
+:root {
+  --bg: #f3f1ec; --card: #ffffff; --ink: #1c1a17; --muted: #75705f; --line: #e3ded4;
+  --accent: #6b4dff; --accent-ink: #ffffff; --wait: #c47a00;
+  --led-off: #e9e5dc; --seg-off: #ebe7df; --seg-on: #1c1a17;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121110; --card: #1b1a18; --ink: #ece8e0; --muted: #9b9588; --line: #2c2a27;
+    --accent: #8f78ff; --wait: #e2a23b;
+    --led-off: #2a2826; --seg-off: #262421; --seg-on: #fff6e0;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header {
+  max-width: 1040px; margin: 0 auto; padding: 22px 16px 6px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
+.conn { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.conn i { width: 8px; height: 8px; border-radius: 50%; background: #c33; display: inline-block; }
+.conn.on i { background: #2a9d55; }
+main {
+  max-width: 1040px; margin: 0 auto; padding: 10px 16px 40px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;
+}
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 18px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 14px;
+}
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+h2 { font-size: 16px; margin: 0; font-weight: 650; }
+.pill {
+  font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
+  color: var(--muted); white-space: nowrap;
+}
+.pill.ours { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.pill.wait { border-color: var(--wait); color: var(--wait); }
+svg { display: block; width: 100%; height: auto; user-select: none; }
+.zone { cursor: pointer; }
+.zone .sel { fill: none; stroke: transparent; stroke-width: 3; }
+.zone.selected .sel { stroke: var(--accent); }
+.zone text { font-size: 12px; fill: var(--muted); text-anchor: middle; pointer-events: none; }
+/* Прозрачная обводка расширяет область клика: сами сегменты тонкие. */
+.seg { cursor: pointer; transition: fill .08s; stroke: transparent; stroke-width: 9; stroke-linejoin: round; }
+.seg:hover { stroke: var(--accent); stroke-opacity: .3; }
+.seg.want { stroke: var(--accent); stroke-opacity: 1; stroke-width: 2; stroke-dasharray: 3 3; }
+.seg.deg { stroke-width: 3.5; stroke-opacity: 1; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.row label { font-size: 13px; color: var(--muted); min-width: 64px; }
+input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+input[type=color] { width: 44px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: none; padding: 2px; }
+input[type=text] {
+  flex: 1; min-width: 90px; font: inherit; font-variant-numeric: tabular-nums;
+  padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+}
+.val { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); width: 32px; text-align: right; }
+.swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+.swatch { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); cursor: pointer; padding: 0; }
+button {
+  font: inherit; font-size: 14px; padding: 7px 13px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+}
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.link { border: none; background: none; padding: 2px 4px; color: var(--accent); font-size: 13px; }
+.foot {
+  margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+}
+.fw { font-size: 13px; color: var(--muted); }
+.fw b { font-weight: 500; color: var(--ink); }
+.hint { font-size: 13px; color: var(--muted); margin: 0; }
+#toast {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+  background: #b3261e; color: #fff; padding: 9px 14px; border-radius: 10px; font-size: 14px;
+  opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px);
+}
+#toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Станция Мини 3 · подсветка</h1>
+  <div class="conn" id="conn"><i></i><span>нет связи</span></div>
+</header>
+
+<main>
+  <section class="card">
+    <div class="card-head"><h2>Логотип · 6 зон</h2><span class="pill" id="ringPill">…</span></div>
+    <svg id="ringSvg" viewBox="0 0 240 240" aria-label="Зоны подсветки"></svg>
+    <div class="row">
+      <label>Зоны</label>
+      <button class="link" id="selAll">все</button>
+      <button class="link" id="selNone">снять выбор</button>
+      <span class="hint" id="selInfo"></span>
+    </div>
+    <div class="row">
+      <label>Цвет</label>
+      <input type="color" id="color" value="#6b4dff">
+      <div class="swatches" id="swatches"></div>
+    </div>
+    <div class="row">
+      <label>Яркость</label>
+      <input type="range" id="ringBright" min="0" max="255" value="255">
+      <span class="val" id="ringBrightVal">255</span>
+    </div>
+    <div class="row">
+      <button class="primary" id="ringOn">Включить</button>
+      <button id="ringOff">Выключить</button>
+    </div>
+    <div class="foot">
+      <span class="fw" id="ringFw"></span>
+      <button id="ringRelease">Отдать прошивке</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Часы</h2><span class="pill" id="clockPill">…</span></div>
+    <svg id="clockSvg" viewBox="0 0 400 150" aria-label="Сегменты часов"></svg>
+    <p class="hint">Кликните по сегменту, чтобы включить или выключить его.</p>
+    <div class="row">
+      <label>Текст</label>
+      <input type="text" id="text" maxlength="6" placeholder="12:34, -HI-, 23°">
+      <button class="primary" id="textShow">Показать</button>
+    </div>
+    <div class="row">
+      <label>Яркость</label>
+      <input type="range" id="clockBright" min="0" max="255" value="40">
+      <span class="val" id="clockBrightVal">40</span>
+    </div>
+    <div class="row">
+      <button id="clockAll">Всё включить</button>
+      <button id="clockClear">Очистить</button>
+    </div>
+    <div class="foot">
+      <span class="fw" id="clockFw"></span>
+      <button id="clockRelease">Отдать прошивке</button>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const NS = 'http://www.w3.org/2000/svg';
+const svgEl = (tag, attrs, parent) => {
+  const el = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  if (parent) parent.appendChild(el);
+  return el;
+};
+
+let state = null;
+const selected = new Set([0, 1, 2, 3, 4, 5]);
+
+// ---- связь с агентом ----
+
+let toastTimer;
+function toast(msg) {
+  $('toast').textContent = msg;
+  $('toast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $('toast').classList.remove('show'), 3500);
+}
+
+async function post(path, body) {
+  try {
+    const r = await fetch(path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) toast(data.error || r.statusText);
+  } catch (e) {
+    toast('Колонка не отвечает');
+  }
+}
+
+// Не чаще раза в ms, но последнее значение всегда уходит.
+function throttle(fn, ms) {
+  let last = 0, timer = null, args = null;
+  return (...a) => {
+    args = a;
+    const wait = ms - (Date.now() - last);
+    if (wait <= 0) { last = Date.now(); fn(...args); return; }
+    if (!timer) timer = setTimeout(() => { timer = null; last = Date.now(); fn(...args); }, wait);
+  };
+}
+
+function connect() {
+  const es = new EventSource('/api/events');
+  es.onopen = () => setConn(true);
+  es.onerror = () => setConn(false);
+  es.onmessage = e => { state = JSON.parse(e.data); setConn(true); render(); };
+}
+function setConn(on) {
+  $('conn').classList.toggle('on', on);
+  $('conn').querySelector('span').textContent = on ? 'на связи' : 'нет связи';
+}
+
+// ---- кольцо ----
+
+const zoneEls = [];
+(function buildRing() {
+  const svg = $('ringSvg');
+  const defs = svgEl('defs', {}, svg);
+  const blur = svgEl('filter', { id: 'glow', x: '-1', y: '-1', width: '3', height: '3' }, defs);
+  svgEl('feGaussianBlur', { stdDeviation: '9' }, blur);
+  for (let i = 0; i < 6; i++) {
+    const a = -Math.PI / 2 + i * Math.PI / 3;
+    const x = 120 + 78 * Math.cos(a), y = 120 + 78 * Math.sin(a);
+    const g = svgEl('g', { class: 'zone' }, svg);
+    const glow = svgEl('circle', { cx: x, cy: y, r: 24, filter: 'url(#glow)' }, g);
+    const led = svgEl('circle', { cx: x, cy: y, r: 24 }, g);
+    svgEl('circle', { class: 'sel', cx: x, cy: y, r: 30 }, g);
+    const lx = 120 + 34 * Math.cos(a), ly = 124 + 34 * Math.sin(a);
+    svgEl('text', { x: lx, y: ly }, g).textContent = i;
+    g.addEventListener('click', () => {
+      selected.has(i) ? selected.delete(i) : selected.add(i);
+      render();
+    });
+    zoneEls.push({ g, glow, led });
+  }
+})();
+
+// Как светодиод выглядит глазом: оттенок на полную, а яркость — прозрачностью.
+function ledLook(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  const r = v >> 16, g = (v >> 8) & 255, b = v & 255, m = Math.max(r, g, b);
+  if (m === 0) return null;
+  const k = 255 / m;
+  return {
+    color: `rgb(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)})`,
+    opacity: 0.35 + 0.65 * Math.sqrt(m / 255),
+  };
+}
+
+const swatchColors = ['#ff0000', '#ff7a00', '#ffd400', '#00d26a', '#00c8ff', '#2050ff', '#6b4dff', '#ff3cac', '#ffffff'];
+for (const c of swatchColors) {
+  const b = document.createElement('button');
+  b.className = 'swatch'; b.style.background = c; b.title = c;
+  b.addEventListener('click', () => { $('color').value = c; sendRing({ color: c }); });
+  $('swatches').appendChild(b);
+}
+
+function zonesOrWarn() {
+  if (selected.size === 0) { toast('Выберите хотя бы одну зону'); return null; }
+  return [...selected].sort();
+}
+function sendRing(change) {
+  const zones = zonesOrWarn();
+  if (zones) post('/api/ring', { zones, ...change });
+}
+const sendRingThrottled = throttle(sendRing, 60);
+
+$('selAll').onclick = () => { for (let i = 0; i < 6; i++) selected.add(i); render(); };
+$('selNone').onclick = () => { selected.clear(); render(); };
+$('color').addEventListener('input', e => sendRingThrottled({ color: e.target.value }));
+$('ringBright').addEventListener('input', e => {
+  $('ringBrightVal').textContent = e.target.value;
+  sendRingThrottled({ brightness: +e.target.value });
+});
+$('ringOn').onclick = () => sendRing({ on: true });
+$('ringOff').onclick = () => sendRing({ on: false });
+$('ringRelease').onclick = () => post('/api/ring/release');
+
+// ---- часы ----
+
+const segEls = {};
+(function buildClock() {
+  const svg = $('clockSvg');
+  const t = 11, W = 56, H = 104, top = 22;
+  const horiz = (x, y, L) =>
+    `${x + t / 2},${y} ${x + t},${y - t / 2} ${x + L - t},${y - t / 2} ${x + L - t / 2},${y} ${x + L - t},${y + t / 2} ${x + t},${y + t / 2}`;
+  const vert = (x, y, L) =>
+    `${x},${y + t / 2} ${x + t / 2},${y + t} ${x + t / 2},${y + L - t} ${x},${y + L - t / 2} ${x - t / 2},${y + L - t} ${x - t / 2},${y + t}`;
+  const digitX = [24, 104, 214, 294];
+  digitX.forEach((x, pos) => {
+    const shapes = {
+      A: horiz(x, top, W), B: vert(x + W, top, H / 2), C: vert(x + W, top + H / 2, H / 2),
+      D: horiz(x, top + H, W), E: vert(x, top + H / 2, H / 2), F: vert(x, top, H / 2), G: horiz(x, top + H / 2, W),
+    };
+    for (const [part, points] of Object.entries(shapes)) {
+      segEls[part + pos] = svgEl('polygon', { points, class: 'seg' }, svg);
+    }
+  });
+  segEls.DH = svgEl('circle', { cx: 187, cy: top + 30, r: 6.5, class: 'seg' }, svg);
+  segEls.DM = svgEl('circle', { cx: 187, cy: top + H / 2, r: 4.5, class: 'seg' }, svg);
+  segEls.DL = svgEl('circle', { cx: 187, cy: top + H - 30, r: 6.5, class: 'seg' }, svg);
+  segEls.DEGREE = svgEl('circle', { cx: 376, cy: top + 4, r: 7, class: 'seg deg', fill: 'none', 'pointer-events': 'all' }, svg);
+  for (const [name, el] of Object.entries(segEls)) {
+    el.addEventListener('click', () => {
+      if (!state) return;
+      const c = state.clock;
+      const isOn = c.owned ? c.segments[name] : c.actual[name] > 0;
+      post('/api/clock', { segments: { [name]: !isOn } });
+    });
+  }
+})();
+
+const sendClockBright = throttle(v => post('/api/clock', { brightness: v }), 60);
+$('clockBright').addEventListener('input', e => {
+  $('clockBrightVal').textContent = e.target.value;
+  sendClockBright(+e.target.value);
+});
+const showText = () => post('/api/clock', { text: $('text').value });
+$('textShow').onclick = showText;
+$('text').addEventListener('keydown', e => { if (e.key === 'Enter') showText(); });
+$('clockAll').onclick = () => post('/api/clock', { segments: Object.fromEntries(Object.keys(segEls).map(n => [n, true])) });
+$('clockClear').onclick = () => post('/api/clock', { clear: true });
+$('clockRelease').onclick = () => post('/api/clock/release');
+
+// ---- отрисовка состояния ----
+
+function pill(el, part, fwIdle) {
+  if (!part.owned) { el.className = 'pill'; el.textContent = 'Управляет прошивка'; }
+  else if (part.active) { el.className = 'pill ours'; el.textContent = 'Управляем мы'; }
+  else { el.className = 'pill wait'; el.textContent = fwIdle ? 'Сейчас вернём' : 'Ждём Алису'; }
+}
+
+const animName = n => n === '<Animation>' ? 'время' : n;
+const fwText = list => (list && list.length) ? list.filter(n => n !== 'FadeOut').map(animName).join(' → ') : 'нет данных';
+
+// Не перезаписываем поле, которое пользователь сейчас двигает.
+function setInput(el, value) { if (document.activeElement !== el) el.value = value; }
+
+function render() {
+  if (!state) return;
+  const { ring, clock, firmware } = state;
+
+  ring.actual.forEach((hex, i) => {
+    const z = zoneEls[i], look = ledLook(hex);
+    z.led.setAttribute('fill', look ? look.color : 'var(--led-off)');
+    z.led.setAttribute('fill-opacity', look ? look.opacity : 1);
+    z.glow.setAttribute('fill', look ? look.color : 'transparent');
+    z.glow.setAttribute('fill-opacity', look ? look.opacity * 0.8 : 0);
+    z.g.classList.toggle('selected', selected.has(i));
+  });
+  $('selInfo').textContent = 'выбрано: ' + selected.size;
+  const first = [...selected].sort()[0];
+  if (first !== undefined) {
+    setInput($('color'), ring.zones[first].color);
+    setInput($('ringBright'), ring.zones[first].brightness);
+    if (document.activeElement !== $('ringBright')) $('ringBrightVal').textContent = ring.zones[first].brightness;
+  }
+  pill($('ringPill'), ring, firmware.ringIdle);
+  $('ringFw').innerHTML = 'Алиса: <b></b>';
+  $('ringFw').querySelector('b').textContent = fwText(firmware.ring);
+
+  let maxActual = 0;
+  for (const [name, el] of Object.entries(segEls)) {
+    const b = clock.actual[name];
+    maxActual = Math.max(maxActual, b);
+    const lit = b > 0;
+    // Градус — кольцо, его цвет в обводке; inline-стиль сильнее правил .seg.
+    const color = lit ? 'var(--seg-on)' : 'var(--seg-off)', opacity = lit ? 0.75 + 0.25 * Math.sqrt(b / 255) : 1;
+    if (name === 'DEGREE') { el.style.stroke = color; el.style.strokeOpacity = opacity; }
+    else { el.setAttribute('fill', color); el.setAttribute('fill-opacity', opacity); }
+    // Пунктир — сегмент нужен нам, но сейчас его не видно (рисует прошивка).
+    el.classList.toggle('want', clock.owned && !clock.active && clock.segments[name] && !lit);
+  }
+  const bright = clock.owned ? clock.brightness : maxActual;
+  setInput($('clockBright'), bright);
+  if (document.activeElement !== $('clockBright')) $('clockBrightVal').textContent = bright;
+  pill($('clockPill'), clock, firmware.clockIdle);
+  $('clockFw').innerHTML = 'Алиса: <b></b>';
+  $('clockFw').querySelector('b').textContent = fwText(firmware.clock);
+}
+
+connect();
+</script>
+</body>
+</html>
