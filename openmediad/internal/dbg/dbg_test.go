@@ -243,6 +243,22 @@ func TestStreamLimit(t *testing.T) {
 	}
 }
 
+func TestExplainFileStartTellsRingFromOneShot(t *testing.T) {
+	for _, tc := range []struct {
+		loop uint64
+		want string
+	}{{0, "звонок"}, {1, "системный звук"}} {
+		d := pb.AppendString(pb.AppendUint(nil, 4, 4), 25, "/system/vendor/quasar/sounds/common/x.mp3")
+		d = pb.AppendUint(d, 50, tc.loop)
+		c := pb.AppendBytes(nil, 1, d)
+		c = pb.AppendBytes(c, 22, pb.AppendString(pb.AppendUint(nil, 1, 4), 2, "f1e2d3c4-0000"))
+		e, ok := DescribeFrame(true, wire.Wrap(wire.TypeAudioCommand, c))
+		if !ok || !strings.Contains(e.Msg, tc.want) || e.Data["file_loops"] != (tc.loop == 0) {
+			t.Errorf("50:%d: msg=%q data=%v", tc.loop, e.Msg, e.Data)
+		}
+	}
+}
+
 func TestExplainFileStartShowsSystemSoundPath(t *testing.T) {
 	d := pb.AppendUint(nil, 4, 4)
 	d = pb.AppendString(d, 25, "/system/vendor/quasar/sounds/common/timer.wav")

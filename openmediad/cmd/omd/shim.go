@@ -46,6 +46,7 @@ func shimCmd(args []string) error {
 		"aplay по кругу до release; если не заиграл за 3 с, команда уходит настоящему mediad")
 	soundsAplay := fs.String("sounds-aplay", "", "-sounds: путь к aplay для звонков (только для проверки отката: несуществующий путь заставляет mediad звонить сам)")
 	spectrumOn := fs.Bool("spectrum", true, "-music и -voice: считать спектр для дисплея и светодиодов и отправлять его iohub (как штатный mediad)")
+	spectrumDelay := fs.Duration("spectrum-delay", specDelay, "-spectrum: на сколько метка времени кадра спектра опережает его отправку (через сколько после передачи aplay звук прозвучит); для подбора анимации на глаз")
 	debugAddr := fs.String("debug", "", "отладочный порт, например 0.0.0.0:6701 (пусто — выключен): веб-страница и журнал "+
 		"с пояснениями, только чтение; на странице видны распознанные фразы и названия треков, но не ключи и не ссылки")
 	debugCORS := fs.Bool("debug-cors", false, "-debug: разрешить чтение журнала странице с другого источника (локальный html-файл)")
@@ -124,7 +125,7 @@ func shimCmd(args []string) error {
 		}
 		if *spectrumOn {
 			cli := &iohub.Client{Logf: logf}
-			snd := newSpecSender(cli, specDelay, hub)
+			snd := newSpecSender(cli, *spectrumDelay, hub)
 			if *musicOn {
 				eng.OnSpectrum = snd.Add
 			}

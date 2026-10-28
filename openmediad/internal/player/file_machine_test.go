@@ -74,6 +74,15 @@ func fileStartCmd(id, path string) quasar.AudioCommand {
 	return pb.AppendBytes(pb.AppendBytes(nil, 1, d), 22, filePlayer(id))
 }
 
+// fileOnceCmd — стартовая команда одноразового системного звука (звук после «Алиса», щелчок громкости): в дескрипторе 50:1.
+func fileOnceCmd(id, path string) quasar.AudioCommand {
+	d := pb.AppendUint(nil, 4, 4)
+	d = pb.AppendUint(d, 19, 0)
+	d = pb.AppendString(d, 25, path)
+	d = pb.AppendUint(d, 50, 1)
+	return pb.AppendBytes(pb.AppendBytes(nil, 1, d), 22, filePlayer(id))
+}
+
 func fileReleaseCmd(id string) quasar.AudioCommand {
 	return pb.AppendString(pb.AppendBytes(nil, 22, filePlayer(id)), 31, "")
 }
@@ -415,6 +424,39 @@ func TestFileOutsideSystemSoundsGoesToMediad(t *testing.T) {
 	r.m.FileOK = func(p string) bool { return p == "/data/x.wav" }
 	if !r.m.Handle(nil, fileStartCmd("f2", "/data/x.wav")) {
 		t.Fatal("FileOK разрешил файл: машина обязана его взять")
+	}
+}
+
+// Звук после «Алиса» и щелчок громкости играют один раз, и конец сообщает сам плеер: release платформа не присылает. Шим,
+// игравший их по кругу «до release», зациклил звук на колонке (проверка на слух 28.10.2026): теперь такие звуки играет mediad.
+func TestFileOneShotSoundsStayWithMediad(t *testing.T) {
+	r, ff := newFileRig(t)
+	var notes []string
+	r.m.Note = func(kind, id, detail string) { notes = append(notes, kind+" "+id+" "+detail) }
+	for i, p := range []string{
+		"/system/vendor/quasar/sounds/common/spotter_start.mp3",
+		"/system/vendor/quasar/sounds/common/volume_sound.mp3",
+	} {
+		id := fmt.Sprintf("o%d", i)
+		if r.m.Handle(nil, fileOnceCmd(id, p)) {
+			t.Fatalf("%s: одноразовый звук должен идти mediad", p)
+		}
+		if r.m.Handle(nil, fileReleaseCmd(id)) {
+			t.Fatalf("%s: release одноразового плеера идёт mediad", p)
+		}
+	}
+	r.advance(5 * time.Second)
+	if ff.count() != 0 {
+		t.Fatalf("бэкенд не должен играть одноразовые звуки: %v", ff.calls)
+	}
+	if n := len(r.events()); n != 0 {
+		t.Fatalf("шим не должен выпускать события чужого плеера: %d", n)
+	}
+	if len(notes) != 2 || notes[0][:9] != "file-once" {
+		t.Fatalf("в журнал должны попасть оба звука: %v", notes)
+	}
+	if !r.m.Handle(nil, fileStartCmd("ring", timerWav)) { // звонок рядом по-прежнему берёт шим
+		t.Fatal("звонок таймера (50:0) должен играть шим")
 	}
 }
 

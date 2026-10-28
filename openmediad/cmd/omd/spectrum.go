@@ -10,14 +10,20 @@ import (
 	"openmediad/internal/spectrum"
 )
 
-// specDelay — на сколько отложить спектр относительно момента, когда звук передан aplay: между этим моментом и
-// динамиком лежат труба (64 КБ ≈ 340 мс) и буфер смесителя; у штатного GStreamer такой же запас даёт буфер alsasink.
-// Значение оценочное (на слух/глаз не подбиралось).
+// specDelay — на сколько метка времени кадра спектра опережает момент, когда кадр отправлен: через столько после передачи
+// звука aplay он прозвучит (труба 64 КБ ≈ 340 мс и буфер смесителя). У штатного mediad кадр уходит сразу, а в поле 1 стоит
+// время, когда звук будет слышен: приход − метка ≈ −0,29 с во всех записях штатной музыки и голоса. Метка в прошлом
+// (наш первый вариант: кадр держали 300 мс и ставили время расчёта, приход − метка = +0,30 с) — платформа не рисует анимацию.
+// Значение оценочное; флаг -spectrum-delay позволяет подобрать его глазами.
 const specDelay = 300 * time.Millisecond
 
-// specSender берёт события спектра движка, откладывает их на delay и отправляет iohub, сохраняя порядок.
+// frameSender — куда уходят сообщения спектра (iohub.Client; в тестах подмена).
+type frameSender interface{ Send(msg []byte) bool }
+
+// specSender берёт события спектра движка и отправляет их iohub по порядку. Кадр уходит сразу, с меткой «когда прозвучит»
+// (время расчёта + delay); остановка потока (6:2) уходит через delay, когда последний кадр уже прозвучал, как у mediad.
 type specSender struct {
-	cli   *iohub.Client
+	cli   frameSender
 	delay time.Duration
 	hub   *dbg.Hub
 
@@ -32,7 +38,7 @@ type queued struct {
 	ev spectrum.Event
 }
 
-func newSpecSender(cli *iohub.Client, delay time.Duration, hub *dbg.Hub) *specSender {
+func newSpecSender(cli frameSender, delay time.Duration, hub *dbg.Hub) *specSender {
 	return &specSender{cli: cli, delay: delay, hub: hub, wake: make(chan struct{}, 1)}
 }
 
@@ -41,11 +47,18 @@ func (s *specSender) Add(ev spectrum.Event) {
 	if ev.DB != nil {
 		ev.DB = append([]float32(nil), ev.DB...)
 	}
+	at := time.Now()
+	switch ev.Kind {
+	case iohub.KindData:
+		ev.At = ev.At.Add(s.delay) // метка кадра — момент, когда звук прозвучит; сам кадр уходит сразу
+	case iohub.KindStop:
+		at = at.Add(s.delay) // остановка — после того, как прозвучал последний кадр
+	}
 	s.mu.Lock()
 	if len(s.q) > 512 { // iohub не принимает: не копить
 		s.q = s.q[1:]
 	}
-	s.q = append(s.q, queued{time.Now().Add(s.delay), ev})
+	s.q = append(s.q, queued{at, ev})
 	s.mu.Unlock()
 	select {
 	case s.wake <- struct{}{}:

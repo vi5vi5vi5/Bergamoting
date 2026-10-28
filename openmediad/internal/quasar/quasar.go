@@ -331,6 +331,19 @@ func (c AudioCommand) Classify() CommandKind {
 	return CmdOther
 }
 
+// FileLoops — звучит ли файл по кругу, пока платформа не пришлёт release: поле 1.50 дескриптора равно 0.
+// У звонка таймера и будильника оно 0 (timer.wav, 50:0); у системных звуков (звук после «Алиса», щелчок громкости:
+// spotter_start.mp3, volume_sound.mp3) оно 1: файл играет один раз, и конец сообщает сам плеер. Если поля нет, считаем,
+// что файл одноразовый: по кругу играем только то, что видели в записях.
+func (c AudioCommand) FileLoops() bool {
+	d, ok := pb.Bytes(c, 1)
+	if !ok {
+		return false
+	}
+	v, ok := pb.Uint(d, 50)
+	return ok && v == 0
+}
+
 // FilePath — путь к файлу из стартовой команды плеера файлов (поле 1.25).
 func (c AudioCommand) FilePath() (string, bool) {
 	d, ok := pb.Bytes(c, 1)

@@ -161,7 +161,7 @@ func TestFileEventsMatchRecordings(t *testing.T) {
 			switch m.Type {
 			case wire.TypeAudioCommand:
 				c := quasar.AudioCommand(append([]byte(nil), m.Body...))
-				if c.Classify() == quasar.CmdFileStart {
+				if c.Classify() == quasar.CmdFileStart && c.FileLoops() { // одноразовые звуки (50:1) автомат не играет: правила только для звонков
 					starts[c.Player().ID] = c
 				}
 				if c.Player().Kind == quasar.PlayerFile && c.Classify() == quasar.CmdRelease {

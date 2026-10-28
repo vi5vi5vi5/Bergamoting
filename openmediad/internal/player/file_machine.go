@@ -76,7 +76,8 @@ func (m *Machine) fstop(f *finst) {
 	f.cancelers = nil
 }
 
-// fileStart обрабатывает стартовую команду плеера файлов. false — файл не из разрешённых или плеер отдан mediad.
+// fileStart обрабатывает стартовую команду плеера файлов. false — файл не из разрешённых, одноразовый (играет mediad)
+// или плеер отдан mediad.
 func (m *Machine) fileStart(ctx any, c quasar.AudioCommand) bool {
 	path, _ := c.FilePath()
 	ok := m.FileOK
@@ -84,6 +85,10 @@ func (m *Machine) fileStart(ctx any, c quasar.AudioCommand) bool {
 		ok = DefaultFileOK
 	}
 	if !ok(path) {
+		return false
+	}
+	if !c.FileLoops() { // системный звук (активация, щелчок громкости): играет один раз, конец сообщает плеер, release не придёт
+		m.note("file-once", c.Player().ID, path)
 		return false
 	}
 	c = append(quasar.AudioCommand(nil), c...) // буфер кадра принадлежит шиму

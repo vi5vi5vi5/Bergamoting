@@ -147,6 +147,29 @@ func cmd(parts ...[]byte) AudioCommand {
 	return b
 }
 
+func TestFileLoops(t *testing.T) {
+	desc := func(extra func([]byte) []byte) AudioCommand {
+		d := pb.AppendString(pb.AppendUint(nil, 4, 4), 25, "/system/vendor/quasar/sounds/common/x.mp3")
+		return pb.AppendBytes(nil, 1, extra(d))
+	}
+	cases := []struct {
+		name string
+		c    AudioCommand
+		want bool
+	}{
+		{"звонок: 50:0", desc(func(d []byte) []byte { return pb.AppendUint(d, 50, 0) }), true},
+		{"одноразовый звук: 50:1", desc(func(d []byte) []byte { return pb.AppendUint(d, 50, 1) }), false},
+		{"поля 50 нет", desc(func(d []byte) []byte { return d }), false},
+		{"нет дескриптора", AudioCommand(pb.AppendUint(nil, 3, 1)), false},
+		{"50 на верхнем уровне — не дескриптор", AudioCommand(pb.AppendUint(nil, 50, 0)), false},
+	}
+	for _, tc := range cases {
+		if got := tc.c.FileLoops(); got != tc.want {
+			t.Errorf("%s: FileLoops=%v, ждали %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestClassify(t *testing.T) {
 	voice := pb.AppendBytes(nil, 22, player(2, "72daa5dc", ""))
 	audio := pb.AppendBytes(nil, 22, player(1, "76006c91", "44683635"))
